@@ -6,9 +6,9 @@ Delphi AES Encryption, Golang AES Decryption. AES-256-CBC-PKCS7...
 
 You should Add `DCPCrypt/`, `DCPCrypt/Ciphers` to library search path.
 
-## Example
+## Examples
 
-**Encrypt with Delphi:**
+Encrypt with Delphi:
 ```delphi
 uses
   Prism.Crypto.AES, System.NetEncoding;
@@ -27,10 +27,8 @@ begin
 end;
 ```
 
-**Decrypt with Golang:**
+Decrypt with Golang:
 ```go
-package main
-
 import (
 	"bytes"
 	"crypto/aes"
