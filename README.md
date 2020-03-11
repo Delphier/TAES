@@ -1,14 +1,14 @@
 # TAES
-Delphi AES Encryption, Golang AES Decryption. AES-256-CBC-PKCS7
+Delphi AES Encryption, Golang AES Decryption. AES-256-CBC-PKCS7...
 
-## Requirement
+## Requirements
 **DCPCrypt** - https://github.com/StephenGenusa/DCPCrypt
 
 You should Add `DCPCrypt/`, `DCPCrypt/Ciphers` to library search path.
 
 ## Example
 
-### Encrypt with Delphi:
+**Encrypt with Delphi:**
 ```delphi
 uses
   Prism.Crypto.AES, System.NetEncoding;
@@ -26,7 +26,8 @@ begin
   // Output: L/5zwPlqWDSWPy6LbQASgmZF2/cD33ecs/hHeDTUSu0=
 end;
 ```
-### Decrypt with Golang:
+
+**Decrypt with Golang:**
 ```go
 package main
 
