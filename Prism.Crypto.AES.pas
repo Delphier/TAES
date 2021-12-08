@@ -18,6 +18,8 @@ type
   public
     class function Encrypt(const Data: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
     class function EncryptCBC(const AData, AKey: TBytes; const AKeySize: Integer; const APaddingMode: TPaddingMode = pmPKCS7): TBytes;
+    class function Decrypt(const Crypt: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
+    class function DecryptCBC(const ACrypt, AKey: TBytes; const AKeySize: Integer; const APaddingMode: TPaddingMode = pmPKCS7): TBytes;
   end;
 
 implementation
@@ -65,6 +67,54 @@ begin
   CreateGuid(Guid);
   IV := Guid.ToByteArray;
   Result := Encrypt(IV + AData, AKey, AKeySize, IV, cmCBC, APaddingMode);
+end;
+
+class function TAES.Decrypt(const Crypt: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
+var
+  Cipher: TDCP_rijndael;
+  I: integer;
+begin
+  Cipher := TDCP_rijndael.Create(nil);
+  try
+    Cipher.Init(Key[0], KeySize, @InitVector[0]);
+    // Copy Crypt => Data
+    Result := Copy(Crypt, 0, Length(Crypt));
+    // Decrypt Data using the algorithm specified in ChainingMode
+    case ChainingMode of
+      cmCBC: Cipher.DecryptCBC(Result[0], Result[0], Length(Result));
+      cmCFB8bit: Cipher.DecryptCFB8bit(Result[0], Result[0], Length(Result));
+      cmCFBblock: Cipher.DecryptCFBblock(Result[0], Result[0], Length(Result));
+      cmOFB: Cipher.DecryptOFB(Result[0], Result[0], Length(Result));
+      cmCTR: Cipher.DecryptCTR(Result[0], Result[0], Length(Result));
+      cmECB: Cipher.DecryptECB(Result[0], Result[0]);
+    end;
+    // Correct the length of Data, based on the used PaddingMode (only for Block based algorithms)
+    if ChainingMode in [cmCBC, cmECB] then
+      case PaddingMode of
+        pmANSIX923, pmISO10126, pmPKCS7: // these modes store the original Padding count in the last byte
+          SetLength(Result, Length(Result) - Result[Length(Result)-1]);
+        pmISO7816: // this mode uses a fixed end-marker. Find it and correct length accordingly.
+          for I := Length(Result)-1 downto 0 do
+            if Result[I] = $80 then
+            begin
+              SetLength(Result, I);
+              Break;
+            end;
+      end;
+  finally
+    Cipher.Free;
+  end;
+end;
+
+class function TAES.DecryptCBC(const ACrypt, AKey: TBytes; const AKeySize: Integer; const APaddingMode: TPaddingMode): TBytes;
+var
+  Guid: TGUID;
+  IV: TBytes;
+begin
+  CreateGuid(Guid);
+  IV := Guid.ToByteArray;
+  Result := Decrypt(ACrypt, AKey, AKeySize, IV, cmCBC, APaddingMode);
+  Result := Copy(Result, Length(IV), Length(Result) - Length(IV));
 end;
 
 class procedure TAES.BytePadding(var Data: TBytes; BlockSize: integer; PaddingMode: TPaddingMode);
