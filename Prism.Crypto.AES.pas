@@ -6,7 +6,7 @@ unit Prism.Crypto.AES;
 interface
 
 uses
-  SysUtils;
+  System.SysUtils;
 
 type
   TChainingMode = (cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR, cmECB);
@@ -25,7 +25,7 @@ type
 implementation
 
 uses
-  DCPrijndael;
+  Prism.Crypto.AES.Cipher;
 
 class function TAES.Encrypt(const Data: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
 var
