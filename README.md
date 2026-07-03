@@ -1,11 +1,6 @@
 # TAES
 Delphi AES Encryption, Golang AES Decryption. AES-256-CBC-PKCS7...
 
-## Requirements
-**DCPCrypt** - https://github.com/StephenGenusa/DCPCrypt
-
-You should Add `DCPCrypt/`, `DCPCrypt/Ciphers` to library search path.
-
 ## Examples
 
 Encrypt with Delphi:
