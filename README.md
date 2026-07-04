@@ -1,5 +1,23 @@
 # TAES
-Delphi AES Encryption, Golang AES Decryption. AES-256-CBC-PKCS7...
+
+A lightweight AES encryption/decryption unit for Delphi.
+
+## Features
+
+- **AES only** this library is focused exclusively on the AES algorithm; it does not implement other ciphers.
+- **Single unit, no external dependencies** easy to drop into any Delphi project.
+- **Multiple chaining modes** CBC, CFB (8-bit and full block), OFB, CTR, and ECB.
+- **Multiple padding modes** PKCS7, ANSI X.923, ISO 10126, ISO 7816, zero padding, and random padding.
+- **128 / 192 / 256-bit keys** supports all standard AES key sizes.
+
+## Installation
+
+Copy `Prism.Crypto.AES.pas` (and its dependency `Prism.Crypto.AES.Cipher.pas`) into your project, then add the unit to your uses clause:
+
+```delphi
+uses
+  Prism.Crypto.AES;
+```
 
 ## Examples
 
@@ -55,3 +73,7 @@ func main() {
 	// Output: This is the original text
 }
 ```
+
+## Acknowledgments
+
+Most of the original cipher implementation in this library is derived from DCPcrypt (the DCPcrypt Cryptographic Component Library), originally written by David Barton. Many thanks to the DCPcrypt project and its author for the underlying work.
