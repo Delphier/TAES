@@ -46,67 +46,6 @@ type
 {$ENDIF}
    PointerToInt = {$IFDEF DELPHIXE2_UP} Pbyte {$ELSE} NativeInt {$ENDIF};
 
-   { ****************************************************************** }
-   { The base class from which all hash algorithms are to be derived }
-
-type
-   EDCP_hash = class(Exception);
-
-   TDCP_hash = class(TComponent)
-   protected
-      fInitialized: boolean;
-      { Whether or not the algorithm has been initialized }
-
-      procedure DeadInt(Value: integer);
-      { Knudge to display vars in the object inspector }
-      procedure DeadStr(Value: string);
-      { Knudge to display vars in the object inspector }
-
-   private
-      function _GetId: integer;
-      function _GetAlgorithm: string;
-      function _GetHashSize: integer;
-
-   public
-      property Initialized: boolean read fInitialized;
-
-      class function GetId: integer; virtual;
-      { Get the algorithm id }
-      class function GetAlgorithm: string; virtual;
-      { Get the algorithm name }
-      class function GetHashSize: integer; virtual;
-      { Get the size of the digest produced - in bits }
-      class function SelfTest: boolean; virtual;
-      { Tests the implementation with several test vectors }
-
-      procedure Init; virtual;
-      { Initialize the hash algorithm }
-      procedure Final(var Digest); virtual;
-      { Create the final digest and clear the stored information.
-        The size of the Digest var must be at least equal to the hash size }
-      procedure Burn; virtual;
-      { Clear any stored information with out creating the final digest }
-
-      procedure Update(const Buffer; Size: longword); virtual;
-      { Update the hash buffer with Size bytes of data from Buffer }
-      procedure UpdateStream(Stream: TStream; Size: longword);
-      { Update the hash buffer with Size bytes of data from the stream }
-      procedure UpdateStr(const Str: RawByteString);
-
-      { Update the hash buffer with the string }
-{$IFDEF UNICODE_CIPHER}
-      procedure UpdateUnicodeStr(const Str: UnicodeString); overload;
-      { Update the hash buffer with the string }
-{$ENDIF}
-      destructor Destroy; override;
-
-   published
-      property Id: integer read _GetId write DeadInt;
-      property Algorithm: string read _GetAlgorithm write DeadStr;
-      property HashSize: integer read _GetHashSize write DeadInt;
-   end;
-
-   TDCP_hashclass = class of TDCP_hash;
 
    { ****************************************************************************** }
    { The base class from which all encryption components will be derived. }
@@ -144,15 +83,7 @@ type
 
       procedure Init(const Key; Size: longword; InitVector: pointer); virtual;
       { Do key setup based on the data in Key, size is in bits }
-      procedure InitStr(const Key: RawByteString; HashType: TDCP_hashclass);
 
-      { Do key setup based on a hash of the key string }
-
-{$IFDEF UNICODE_CIPHER}
-      procedure InitUnicodeStr(const Key: UnicodeString;
-        HashType: TDCP_hashclass);
-      { Do key setup based on a hash of the key string }
-{$ENDIF}
       procedure Burn; virtual;
       { Clear all stored key information }
       procedure Reset; virtual;
@@ -1618,108 +1549,6 @@ end;
 
 
 
-{ ** TDCP_hash ***************************************************************** }
-
-procedure TDCP_hash.DeadInt(Value: integer);
-begin
-end;
-
-procedure TDCP_hash.DeadStr(Value: string);
-begin
-end;
-
-function TDCP_hash._GetId: integer;
-begin
-   Result := GetId;
-end;
-
-function TDCP_hash._GetAlgorithm: string;
-begin
-   Result := GetAlgorithm;
-end;
-
-function TDCP_hash._GetHashSize: integer;
-begin
-   Result := GetHashSize;
-end;
-
-class function TDCP_hash.GetId: integer;
-begin
-   Result := -1;
-end;
-
-class function TDCP_hash.GetAlgorithm: string;
-begin
-   Result := '';
-end;
-
-class function TDCP_hash.GetHashSize: integer;
-begin
-   Result := -1;
-end;
-
-class function TDCP_hash.SelfTest: boolean;
-begin
-   Result := false;
-end;
-
-procedure TDCP_hash.Init;
-begin
-end;
-
-procedure TDCP_hash.Final(var Digest);
-begin
-end;
-
-procedure TDCP_hash.Burn;
-begin
-end;
-
-procedure TDCP_hash.Update(const Buffer; Size: longword);
-begin
-end;
-
-procedure TDCP_hash.UpdateStream(Stream: TStream; Size: longword);
-var
-   Buffer: array [0 .. 8191] of byte;
-   i, read: integer;
-begin
-   FillChar(Buffer, SizeOf(Buffer), 0);
-   for i := 1 to (Size div SizeOf(Buffer)) do
-   begin
-      read := Stream.read(Buffer, SizeOf(Buffer));
-      Update(Buffer, read);
-   end;
-   if (Size mod SizeOf(Buffer)) <> 0 then
-   begin
-      read := Stream.read(Buffer, Size mod SizeOf(Buffer));
-      Update(Buffer, read);
-   end;
-end;
-
-procedure TDCP_hash.UpdateStr(const Str: RawByteString);
-begin
-{$IFDEF NEXTGEN}
-  Update(Str.GetBuffer[0], AnsiLength(Str));
-{$ELSE}
-  Update(Str[1], Length(Str));
-{$ENDIF}
-end;
-
-{$IFDEF UNICODE_CIPHER}
-
-procedure TDCP_hash.UpdateUnicodeStr(const Str: UnicodeString);
-begin
-   Update(Str[1], Length(Str) * SizeOf(Str[1]));
-end; { DecryptString }
-{$ENDIF}
-
-destructor TDCP_hash.Destroy;
-begin
-   if fInitialized then
-      Burn;
-   inherited Destroy;
-end;
 
 { ** TDCP_cipher *************************************************************** }
 
@@ -1776,66 +1605,6 @@ begin
    else
       fInitialized := true;
 end;
-
-procedure TDCP_cipher.InitStr(const Key: RawByteString; HashType: TDCP_hashclass);
-var
-   Hash: TDCP_hash;
-   Digest: pointer;
-begin
-   if fInitialized then
-      Burn;
-   try
-      GetMem(Digest, HashType.GetHashSize div 8);
-      Hash := HashType.Create(Self);
-      Hash.Init;
-      Hash.UpdateStr(Key);
-      Hash.Final(Digest^);
-      Hash.Free;
-      if MaxKeySize < HashType.GetHashSize then
-      begin
-         Init(Digest^, MaxKeySize, nil);
-      end
-      else
-      begin
-         Init(Digest^, HashType.GetHashSize, nil);
-      end;
-      FillChar(Digest^, HashType.GetHashSize div 8, $FF);
-      FreeMem(Digest);
-   except
-      raise EDCP_cipher.Create
-        ('Unable to allocate sufficient memory for hash digest');
-   end;
-end;
-
-{$IFDEF UNICODE_CIPHER}
-procedure TDCP_cipher.InitUnicodeStr(const Key: UnicodeString;
-  HashType: TDCP_hashclass);
-var
-   Hash: TDCP_hash;
-   Digest: pointer;
-begin
-   if fInitialized then
-      Burn;
-   try
-      GetMem(Digest, HashType.GetHashSize div 8);
-      Hash := HashType.Create(Self);
-      Hash.Init;
-      Hash.UpdateUnicodeStr(Key);
-      Hash.Final(Digest^);
-      Hash.Free;
-      if MaxKeySize < HashType.GetHashSize then
-         Init(Digest^, MaxKeySize, nil)
-      else
-         Init(Digest^, HashType.GetHashSize, nil);
-      FillChar(Digest^, HashType.GetHashSize div 8, $FF);
-      FreeMem(Digest);
-   except
-      raise EDCP_cipher.Create
-        ('Unable to allocate sufficient memory for hash digest');
-   end;
-end;
-{$ENDIF}
-
 
 procedure TDCP_cipher.Burn;
 begin
