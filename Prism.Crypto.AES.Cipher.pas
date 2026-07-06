@@ -26,14 +26,15 @@ type
 type
    ECipher = class(Exception);
 
-   TCipher = class(TComponent)
+   TCipher = class
    protected
       FInitialized: Boolean; { Whether or not the key setup has been done yet }
    private
       function _GetMaxKeySize: integer;
    public
-      constructor Create(AOwner: TComponent); override;
+      constructor Create;
       destructor Destroy; override;
+      property MaxKeySize: integer read _GetMaxKeySize;
       property Initialized: boolean read fInitialized;
       class function GetMaxKeySize: integer; virtual;
       { Get the maximum key size (in bits) }
@@ -59,8 +60,6 @@ type
       function PartialDecryptStream(AStream: TMemoryStream; Size: longword)
         : longword;
       { Partially Decrypt up to 16K bytes of data in AStream }
-   published
-      property MaxKeySize: integer read _GetMaxKeySize;
    end;
 
    TCipherClass = class of TCipher;
@@ -77,7 +76,9 @@ type
    private
       function _GetBlockSize: integer;
    public
-      constructor Create(AOwner: TComponent); override;
+      constructor Create;
+      property BlockSize: integer read _GetBlockSize;
+      property CipherMode: TCipherMode read FCipherMode write FCipherMode;
       class function GetBlockSize: integer; virtual;
       { Get the block size of the cipher (in bits) }
 
@@ -118,10 +119,6 @@ type
       { Encrypt size bytes of data using the CTR method of encryption }
       procedure DecryptCTR(const Indata; var Outdata; Size: longword); virtual;
       { Decrypt size bytes of data using the CTR method of decryption }
-   published
-      property BlockSize: integer read _GetBlockSize;
-      property CipherMode: TCipherMode read FCipherMode write FCipherMode
-        default cmCBC;
    end;
 
    TBlockCipherClass = class of TBlockCipher;
@@ -222,9 +219,9 @@ implementation
 
 { TCipher }
 
-constructor TCipher.Create(AOwner: TComponent);
+constructor TCipher.Create;
 begin
-   inherited Create(AOwner);
+   inherited;
    Burn;
 end;
 
@@ -374,9 +371,9 @@ end;
 
 { TBlockCipher }
 
-constructor TBlockCipher.Create(AOwner: TComponent);
+constructor TBlockCipher.Create;
 begin
-   inherited Create(AOwner);
+   inherited;
    fCipherMode := cmCBC;
 end;
 

@@ -31,7 +31,7 @@ class function TAES.Encrypt(const Data: TBytes; const Key: TBytes; KeySize: inte
 var
   Cipher: TAESCipher;
 begin
-  Cipher := TAESCipher.Create(nil);
+  Cipher := TAESCipher.Create;
   try
     Cipher.Init(Key[0], KeySize, @InitVector[0]);
     // Copy Data => Crypt
@@ -74,7 +74,7 @@ var
   Cipher: TAESCipher;
   I: integer;
 begin
-  Cipher := TAESCipher.Create(nil);
+  Cipher := TAESCipher.Create;
   try
     Cipher.Init(Key[0], KeySize, @InitVector[0]);
     // Copy Crypt => Data
