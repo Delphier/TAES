@@ -98,19 +98,6 @@ type
       function DecryptStream(InStream, OutStream: TStream; Size: longword)
         : longword;
       { Decrypt size bytes of data from InStream and place in OutStream }
-      function EncryptString(const Str: RawByteString): RawByteString; virtual;
-      { Encrypt a string and return Base64 encoded }
-      function DecryptString(const Str: RawByteString): RawByteString; virtual;
-      { Decrypt a Base64 encoded string }
-
-{$IFDEF UNICODE_CIPHER}
-      function EncryptUnicodeString(const Str: UnicodeString)
-        : UnicodeString; virtual;
-      { Encrypt a Unicode string and return Base64 encoded }
-      function DecryptUnicodeString(const Str: UnicodeString)
-        : UnicodeString; virtual;
-      { Decrypt a Base64 encoded Unicode string }
-{$ENDIF}
       function PartialEncryptStream(AStream: TMemoryStream; Size: longword)
         : longword;
       { Partially Encrypt up to 16K bytes of data in AStream }
@@ -160,20 +147,6 @@ type
       { Encrypt size bytes of data and place in Outdata using CipherMode }
       procedure Decrypt(const Indata; var Outdata; Size: longword); override;
       { Decrypt size bytes of data and place in Outdata using CipherMode }
-      function EncryptString(const Str: RawByteString): RawByteString;
-        overload; override;
-      { Encrypt a string and return Base64 encoded }
-      function DecryptString(const Str: RawByteString): RawByteString;
-        overload; override;
-      { Decrypt a Base64 encoded string }
-
-{$IFDEF UNICODE_CIPHER}
-      function EncryptUnicodeString(const Str: UnicodeString): UnicodeString; override;
-      { Encrypt a Unicode string and return Base64 encoded }
-      function DecryptUnicodeString(const Str: UnicodeString): UnicodeString; override;
-      { Decrypt a Base64 encoded Unicode string }
-{$ENDIF}
-
       procedure EncryptECB(const Indata; var Outdata); virtual;
       { Encrypt a block of data using the ECB method of encryption }
       procedure DecryptECB(const Indata; var Outdata); virtual;
@@ -336,25 +309,6 @@ type
     procedure EncryptECB(const InData; var OutData); override;
     procedure DecryptECB(const InData; var OutData); override;
   end;
-
-
-
-
-function Base64EncodeStr(const Value: AnsiString): AnsiString; overload;
-  { Encode a string into Base64 format }
-function Base64DecodeStr(const Value: AnsiString): AnsiString; overload;
-  { Decode a Base64 format string }
-{$IFDEF UNICODE}
-function Base64EncodeStr(const Value: UnicodeString): UnicodeString; overload;
-  { Encode a Unicode string into Base64 format }
-function Base64DecodeStr(const Value: UnicodeString): UnicodeString; overload;
-  { Decode a Base64 format Unicode string }
-{$ENDIF}
-function Base64Encode(pInput: pointer; pOutput: pointer; Size: longint): longint;
-  { Encode a lump of raw data (output is (4/3) times bigger than input) }
-function Base64Decode(pInput: pointer; pOutput: pointer; Size: longint): longint;
-  { Decode a lump of raw data }
-
 
 implementation
 
@@ -1696,45 +1650,6 @@ begin
    end;
 end;
 
-function TDCP_cipher.EncryptString(const Str: RawByteString): RawByteString;
-//var
-//  lLength : integer;
-begin
-{$IFDEF NEXTGEN}
-  Result.SetLength(AnsiLength(Str));
-  Encrypt(Str.GetBuffer[0], Result.GetBuffer[0], AnsiLength(Str));
-{$ELSE}
-  SetLength(Result, Length(Str));
-  Encrypt(Str[1], Result[1], Length(Str));
-{$ENDIF}
-   Result := Base64EncodeStr(Result);
-end;
-
-function TDCP_cipher.DecryptString(const Str: RawByteString): RawByteString;
-begin
-   Result := Base64DecodeStr(Str);
-{$IFDEF NEXTGEN}
-  Decrypt(Result.GetBuffer[0], Result.GetBuffer[0], AnsiLength(Result));
-{$ELSE}
-  Decrypt(Result[1], Result[1], Length(Result));
-{$ENDIF}
-end;
-
-{$IFDEF UNICODE_CIPHER}
-function TDCP_cipher.EncryptUnicodeString(const Str: UnicodeString): UnicodeString;
-begin
-   SetLength(Result, Length(Str));
-   Encrypt(Str[1], Result[1], Length(Str) * SizeOf(Str[1]));
-   Result := Base64EncodeStr(Result);
-end;
-
-function TDCP_cipher.DecryptUnicodeString(const Str: UnicodeString): UnicodeString;
-begin
-   Result := Base64DecodeStr(Str);
-   Decrypt(Result[1], Result[1], Length(Result) * SizeOf(Result[1]));
-end;
-{$ENDIF}
-
 constructor TDCP_cipher.Create(AOwner: TComponent);
 begin
    inherited Create(AOwner);
@@ -1787,50 +1702,6 @@ begin
          EncryptCTR(Indata, Outdata, Size);
    end;
 end;
-
-function TDCP_blockcipher.EncryptString(const Str: RawByteString): RawByteString;
-begin
-{$IFDEF NEXTGEN}
-  Result.SetLength(AnsiLength(Str));
-  EncryptCFB8bit(Str.GetBuffer[0], Result.GetBuffer[0], AnsiLength(Str));
-{$ELSE}
-  SetLength(Result, Length(Str));
-  EncryptCFB8bit(Str[1], Result[1], Length(Str));
-{$ENDIF}
-   Result := Base64EncodeStr(Result);
-end;
-
-function TDCP_blockcipher.DecryptString(const Str: RawByteString): RawByteString;
-begin
-   Result := Base64DecodeStr(Str);
-{$IFDEF NEXTGEN}
-  DecryptCFB8bit(Result.GetBuffer[0], Result.GetBuffer[0], AnsiLength(Result));
-{$ELSE}
-  DecryptCFB8bit(Result[1], Result[1], Length(Result));
-{$ENDIF}
-end;
-
-{$IFDEF UNICODE_CIPHER}
-
-// TODO: Make this semi-backwards compatible with EncrypteString, via UTF8
-
-function TDCP_blockcipher.EncryptUnicodeString(const Str: UnicodeString)
-  : UnicodeString;
-begin
-   SetLength(Result, Length(Str));
-   EncryptCFB8bit(Str[1], Result[1], Length(Str) * SizeOf(Str[1]));
-   Result := Base64EncodeStr(Result);
-end;
-
-function TDCP_blockcipher.DecryptUnicodeString(const Str: UnicodeString)
-  : UnicodeString;
-begin
-   Result := Base64DecodeStr(Str);
-   DecryptCFB8bit(Result[1], Result[1], Length(Result) * SizeOf(Result[1]));
-end;
-{$ENDIF}
-
-
 
 procedure TDCP_blockcipher.Decrypt(const Indata; var Outdata; Size: longword);
 begin
@@ -2627,145 +2498,6 @@ begin
     XorBlock(p2^,temp,Size mod 16);
   end;
 end;
-
-
-
-
-
-
-const
-  B64: array[0..63] of byte= (65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,
-    81,82,83,84,85,86,87,88,89,90,97,98,99,100,101,102,103,104,105,106,107,108,
-    109,110,111,112,113,114,115,116,117,118,119,120,121,122,48,49,50,51,52,53,
-    54,55,56,57,43,47);
-
-function Base64Encode(pInput: pointer; pOutput: pointer; Size: longint): longint;
-var
-  i, iptr, optr: integer;
-  Input, Output: PByteArray;
-begin
-  Input:= PByteArray(pInput); Output:= PByteArray(pOutput);
-  iptr:= 0; optr:= 0;
-  for i:= 1 to (Size div 3) do
-  begin
-    Output^[optr+0]:= B64[Input^[iptr] shr 2];
-    Output^[optr+1]:= B64[((Input^[iptr] and 3) shl 4) + (Input^[iptr+1] shr 4)];
-    Output^[optr+2]:= B64[((Input^[iptr+1] and 15) shl 2) + (Input^[iptr+2] shr 6)];
-    Output^[optr+3]:= B64[Input^[iptr+2] and 63];
-    Inc(optr,4); Inc(iptr,3);
-  end;
-  case (Size mod 3) of
-    1: begin
-         Output^[optr+0]:= B64[Input^[iptr] shr 2];
-         Output^[optr+1]:= B64[(Input^[iptr] and 3) shl 4];
-         Output^[optr+2]:= byte('=');
-         Output^[optr+3]:= byte('=');
-       end;
-    2: begin
-         Output^[optr+0]:= B64[Input^[iptr] shr 2];
-         Output^[optr+1]:= B64[((Input^[iptr] and 3) shl 4) + (Input^[iptr+1] shr 4)];
-         Output^[optr+2]:= B64[(Input^[iptr+1] and 15) shl 2];
-         Output^[optr+3]:= byte('=');
-       end;
-  end;
-  Result:= ((Size+2) div 3) * 4;
-end;
-
-function Base64EncodeStr(const Value: AnsiString): AnsiString;
-begin
-{$IFDEF NEXTGEN}
-  Result.SetLength( ((AnsiLength(Value)+2) div 3) * 4);
-  Base64Encode(@Value.GetBuffer[0],@Result.GetBuffer[0],AnsiLength(Value));
-{$ELSE}
-  SetLength(Result,((Length(Value)+2) div 3) * 4);
-  Base64Encode(@Value[1],@Result[1],Length(Value));
-{$ENDIF}
-end;
-
-{$IFDEF UNICODE}
-function Base64EncodeStr(const Value: UnicodeString): UnicodeString;
-var
-  temp: AnsiString;
-begin
-{$IFDEF NEXTGEN}
-  temp.SetLength(((Length(Value)*SizeOf(Value[1])+2) div 3) * 4);
-  Base64Encode(@Value[1],@temp.GetBuffer[0],Length(Value)*SizeOf(Value[1]));
-{$ELSE}
-  SetLength(temp,(((Length(Value)*SizeOf(Value[1])+2) div 3) * 4));
-  Base64Encode(@Value[1],@temp[1],Length(Value)*SizeOf(Value[1]));
-{$ENDIF}
-  Result:= UnicodeString(temp);
-end;
-{$ENDIF}
-
-function Base64Decode(pInput: pointer; pOutput: pointer; Size: longint): longint;
-var
-  i, j, iptr, optr: integer;
-  Temp: array[0..3] of byte;
-  Input, Output: PByteArray;
-begin
-  Input:= PByteArray(pInput); Output:= PByteArray(pOutput);
-  iptr:= 0; optr:= 0;
-  Result:= 0;
-  for i:= 1 to (Size div 4) do
-  begin
-    for j:= 0 to 3 do
-    begin
-      case Input^[iptr] of
-        65..90 : Temp[j]:= Input^[iptr] - Ord('A');
-        97..122: Temp[j]:= Input^[iptr] - Ord('a') + 26;
-        48..57 : Temp[j]:= Input^[iptr] - Ord('0') + 52;
-        43     : Temp[j]:= 62;
-        47     : Temp[j]:= 63;
-        61     : Temp[j]:= $FF;
-      end;
-      Inc(iptr);
-    end;
-    Output^[optr]:= (Temp[0] shl 2) or (Temp[1] shr 4);
-    Result:= optr+1;
-    if (Temp[2]<> $FF) and (Temp[3]= $FF) then
-    begin
-      Output^[optr+1]:= (Temp[1] shl 4) or (Temp[2] shr 2);
-      Result:= optr+2;
-      Inc(optr)
-    end
-    else if (Temp[2]<> $FF) then
-    begin
-      Output^[optr+1]:= (Temp[1] shl 4) or (Temp[2] shr 2);
-      Output^[optr+2]:= (Temp[2] shl 6) or  Temp[3];
-      Result:= optr+3;
-      Inc(optr,2);
-    end;
-    Inc(optr);
-  end;
-end;
-
-function Base64DecodeStr(const Value: AnsiString): AnsiString;
-begin
-{$IFDEF NEXTGEN}
-  Result.SetLength((AnsiLength(Value) div 4) * 3);
-  Result.SetLength(Base64Decode(@Value.GetBuffer[0],@Result.GetBuffer[0],AnsiLength(Value)));
-{$ELSE}
-  SetLength(Result,(Length(Value) div 4) * 3);
-  SetLength(Result,Base64Decode(@Value[1],@Result[1],Length(Value)));
-{$ENDIF}
-end;
-
-{$IFDEF UNICODE}
-function Base64DecodeStr(const Value: UnicodeString): UnicodeString;
-var
-  temp: AnsiString;
-begin
-  temp:= AnsiString(Value);
-{$IFDEF NEXTGEN}
-  SetLength(Result,(AnsiLength(temp) div 4) * 3);
-  SetLength(Result,Base64Decode(@temp.GetBuffer[0],@Result[1],AnsiLength(temp)) div SizeOf(Result[1]));
-{$ELSE}
-  SetLength(Result,(Length(temp) div 4) * 3);
-  SetLength(Result,Base64Decode(@temp[1],@Result[1],Length(temp)) div SizeOf(Result[1]));
-{$ENDIF}
-end;
-{$ENDIF}
 
 end.
 
