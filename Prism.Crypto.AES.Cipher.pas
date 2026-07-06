@@ -28,7 +28,7 @@ type
 
    TCipher = class(TComponent)
    protected
-      fInitialized: boolean; { Whether or not the key setup has been done yet }
+      FInitialized: Boolean; { Whether or not the key setup has been done yet }
    private
       function _GetMaxKeySize: integer;
    public
@@ -72,6 +72,7 @@ type
    TBlockCipher = class(TCipher)
    protected
       FCipherMode: TCipherMode;
+      procedure CheckInitialized;
       procedure InitKey(const Key; Size: longword); virtual;
    private
       function _GetBlockSize: integer;
@@ -1215,8 +1216,7 @@ var
   tempb: array[0..MAXBC-1,0..3] of byte;
   a: array[0..MAXBC,0..3] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   PDword(@a[0,0])^:= PDword(@InData)^;
   PDword(@a[1,0])^:= PDword(PointerToInt(@InData)+4)^;
   PDword(@a[2,0])^:= PDword(PointerToInt(@InData)+8)^;
@@ -1281,8 +1281,7 @@ var
   tempb: array[0..MAXBC-1,0..3] of byte;
   a: array[0..MAXBC,0..3] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   PDword(@a[0,0])^:= PDword(@InData)^;
   PDword(@a[1,0])^:= PDword(PointerToInt(@InData)+4)^;
   PDword(@a[2,0])^:= PDword(PointerToInt(@InData)+8)^;
@@ -1494,6 +1493,12 @@ end;
 
 { TBlockCipher }
 
+procedure TBlockCipher.CheckInitialized;
+begin
+  if not FInitialized then
+    raise EBlockCipher.Create('Cipher not initialized');
+end;
+
 procedure TBlockCipher.InitKey(const Key; Size: longword);
 begin
 end;
@@ -1651,25 +1656,21 @@ end;
 
 procedure TBlockCipher64.SetIV(const Value);
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   Move(Value,IV,8);
   Reset;
 end;
 
 procedure TBlockCipher64.GetIV(var Value);
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   Move(CV,Value,8);
 end;
 
 procedure TBlockCipher64.Reset;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized')
-  else
-    Move(IV,CV,8);
+  CheckInitialized;
+  Move(IV,CV,8);
 end;
 
 procedure TBlockCipher64.Burn;
@@ -1696,8 +1697,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 8) do
@@ -1723,8 +1723,7 @@ var
   p1, p2: PByte;
   Temp: array[0..7] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   FillChar(Temp, SizeOf(Temp), 0);
   p1:= @Indata;
   p2:= @Outdata;
@@ -1752,8 +1751,7 @@ var
   p1, p2: Pbyte;
   Temp: array[0..7] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1775,8 +1773,7 @@ var
   TempByte: byte;
   Temp: array[0..7] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1797,8 +1794,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 8) do
@@ -1824,8 +1820,7 @@ var
   p1, p2: PByte;
   Temp: array[0..7] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1852,8 +1847,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 8) do
@@ -1877,8 +1871,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 8) do
@@ -1903,8 +1896,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1932,8 +1924,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1994,25 +1985,21 @@ end;
 
 procedure TBlockCipher128.SetIV(const Value);
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   Move(Value,IV,16);
   Reset;
 end;
 
 procedure TBlockCipher128.GetIV(var Value);
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   Move(CV,Value,16);
 end;
 
 procedure TBlockCipher128.Reset;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized')
-  else
-    Move(IV,CV,16);
+  CheckInitialized;
+  Move(IV,CV,16);
 end;
 
 procedure TBlockCipher128.Burn;
@@ -2027,8 +2014,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 16) do
@@ -2054,8 +2040,7 @@ var
   p1, p2: PByte;
   Temp: array[0..15] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2083,8 +2068,7 @@ var
   p1, p2: Pbyte;
   Temp: array[0..15] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2106,8 +2090,7 @@ var
   TempByte: byte;
   Temp: array[0..15] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2128,8 +2111,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 16) do
@@ -2155,8 +2137,7 @@ var
   p1, p2: PByte;
   Temp: array[0..15] of byte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2183,8 +2164,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 16) do
@@ -2208,8 +2188,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 16) do
@@ -2234,8 +2213,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2263,8 +2241,7 @@ var
   i: longword;
   p1, p2: PByte;
 begin
-  if not fInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
+  CheckInitialized;
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
