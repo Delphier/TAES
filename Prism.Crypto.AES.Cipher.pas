@@ -24,9 +24,9 @@ type
    PointerToInt = {$IFDEF DELPHIXE2_UP} Pbyte {$ELSE} NativeInt {$ENDIF};
 
 type
-   EDCP_cipher = class(Exception);
+   ECipher = class(Exception);
 
-   TDCP_cipher = class(TComponent)
+   TCipher = class(TComponent)
    protected
       fInitialized: boolean; { Whether or not the key setup has been done yet }
    private
@@ -63,15 +63,15 @@ type
       property MaxKeySize: integer read _GetMaxKeySize;
    end;
 
-   TDCP_cipherclass = class of TDCP_cipher;
+   TCipherClass = class of TCipher;
 
-   TDCP_ciphermode = (cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR);
+   TCipherMode = (cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR);
    // cmCFB8bit is equal to DCPcrypt v1.xx's CFB mode
-   EDCP_blockcipher = class(EDCP_cipher);
+   EBlockCipher = class(ECipher);
 
-   TDCP_blockcipher = class(TDCP_cipher)
+   TBlockCipher = class(TCipher)
    protected
-      fCipherMode: TDCP_ciphermode; { The cipher mode the encrypt method uses }
+      FCipherMode: TCipherMode;
       procedure InitKey(const Key; Size: longword); virtual;
    private
       function _GetBlockSize: integer;
@@ -119,16 +119,15 @@ type
       constructor Create(AOwner: TComponent); override;
    published
       property BlockSize: integer read _GetBlockSize;
-      property CipherMode: TDCP_ciphermode read fCipherMode write fCipherMode
+      property CipherMode: TCipherMode read FCipherMode write FCipherMode
         default cmCBC;
    end;
 
-   TDCP_blockcipherclass = class of TDCP_blockcipher;
+   TBlockCipherClass = class of TBlockCipher;
 
-  TDCP_blockcipher64= class(TDCP_blockcipher)
+  TBlockCipher64 = class(TBlockCipher)
   private
     IV, CV: array[0..7] of byte;
-
     procedure IncCounter;
   public
     class function GetBlockSize: integer; override;
@@ -165,10 +164,9 @@ type
       { Decrypt size bytes of data using the CTR method of decryption }
   end;
 
-  TDCP_blockcipher128= class(TDCP_blockcipher)
+  TBlockCipher128 = class(TBlockCipher)
   private
     IV, CV: array[0..15] of byte;
-
     procedure IncCounter;
   public
     class function GetBlockSize: integer; override;
@@ -210,7 +208,7 @@ const
   MAXROUNDS= 14;
 
 type
-  TDCP_rijndael= class(TDCP_blockcipher128)
+  TAESCipher = class(TBlockCipher128)
   protected
     numrounds: longword;
     rk, drk: array[0..MAXROUNDS,0..7] of DWord;
@@ -225,6 +223,8 @@ type
 implementation
 
 {$R-}{$Q-}
+
+{ TAESCipher }
 
 const
   MAXBC= 8;
@@ -1097,7 +1097,7 @@ const
     $01, $02, $04, $08, $10, $20, $40, $80, $1b, $36, $6c, $d8, $ab, $4d, $9a,
     $2f, $5e, $bc, $63, $c6, $97, $35, $6a, $d4, $b3, $7d, $fa, $ef, $c5, $91);
 
-class function TDCP_rijndael.GetMaxKeySize: integer;
+class function TAESCipher.GetMaxKeySize: integer;
 begin
   Result:= 256;
 end;
@@ -1113,7 +1113,7 @@ begin
                        PDWord(@U4[a^[j*4+3]])^;
 end;
 
-procedure TDCP_rijndael.InitKey(const Key; Size: longword);
+procedure TAESCipher.InitKey(const Key; Size: longword);
 var
   KC, ROUNDS, j, r, t, rconpointer: longword;
   tk: array[0..MAXKC-1,0..3] of byte;
@@ -1201,7 +1201,7 @@ begin
     InvMixColumn(@drk[r],BC);
 end;
 
-procedure TDCP_rijndael.Burn;
+procedure TAESCipher.Burn;
 begin
   numrounds:= 0;
   FillChar(rk,Sizeof(rk),0);
@@ -1209,14 +1209,14 @@ begin
   inherited Burn;
 end;
 
-procedure TDCP_rijndael.EncryptECB(const InData; var OutData);
+procedure TAESCipher.EncryptECB(const InData; var OutData);
 var
   r: longword;
   tempb: array[0..MAXBC-1,0..3] of byte;
   a: array[0..MAXBC,0..3] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   PDword(@a[0,0])^:= PDword(@InData)^;
   PDword(@a[1,0])^:= PDword(PointerToInt(@InData)+4)^;
   PDword(@a[2,0])^:= PDword(PointerToInt(@InData)+8)^;
@@ -1275,14 +1275,14 @@ begin
   PDword(PointerToInt(@OutData)+12)^:= PDword(@a[3,0])^;
 end;
 
-procedure TDCP_rijndael.DecryptECB(const InData; var OutData);
+procedure TAESCipher.DecryptECB(const InData; var OutData);
 var
   r: longword;
   tempb: array[0..MAXBC-1,0..3] of byte;
   a: array[0..MAXBC,0..3] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   PDword(@a[0,0])^:= PDword(@InData)^;
   PDword(@a[1,0])^:= PDword(PointerToInt(@InData)+4)^;
   PDword(@a[2,0])^:= PDword(PointerToInt(@InData)+8)^;
@@ -1340,43 +1340,43 @@ begin
   PDword(PointerToInt(@OutData)+12)^:= PDword(@a[3,0])^;
 end;
 
-{ ** TDCP_cipher *************************************************************** }
+{ TCipher }
 
-function TDCP_cipher._GetMaxKeySize: integer;
+function TCipher._GetMaxKeySize: integer;
 begin
    Result := GetMaxKeySize;
 end;
 
-class function TDCP_cipher.GetMaxKeySize: integer;
+class function TCipher.GetMaxKeySize: integer;
 begin
    Result := -1;
 end;
 
-procedure TDCP_cipher.Init(const Key; Size: longword; InitVector: pointer);
+procedure TCipher.Init(const Key; Size: longword; InitVector: pointer);
 begin
    if fInitialized then
       Burn;
    if (Size <= 0) or ((Size and 3) <> 0) or (Size > longword(GetMaxKeySize))
    then
-      raise EDCP_cipher.Create('Invalid key size')
+      raise ECipher.Create('Invalid key size')
    else
       fInitialized := true;
 end;
 
-procedure TDCP_cipher.Burn;
+procedure TCipher.Burn;
 begin
    fInitialized := false;
 end;
 
-procedure TDCP_cipher.Reset;
+procedure TCipher.Reset;
 begin
 end;
 
-procedure TDCP_cipher.Encrypt(const Indata; var Outdata; Size: longword);
+procedure TCipher.Encrypt(const Indata; var Outdata; Size: longword);
 begin
 end;
 
-procedure TDCP_cipher.Decrypt(const Indata; var Outdata; Size: longword);
+procedure TCipher.Decrypt(const Indata; var Outdata; Size: longword);
 begin
 end;
 
@@ -1384,7 +1384,7 @@ const
    EncryptBufSize = 1024 * 1024 * 8; // 8 Megs
    EncryptLimit = (16 * 1024); // 16K operation size
 
-function TDCP_cipher.EncryptStream(InStream, OutStream: TStream; Size: longword)
+function TCipher.EncryptStream(InStream, OutStream: TStream; Size: longword)
   : longword;
 var
    Buffer: TByteDynArray;
@@ -1418,7 +1418,7 @@ begin
    end;
 end;
 
-function TDCP_cipher.DecryptStream(InStream, OutStream: TStream; Size: longword)
+function TCipher.DecryptStream(InStream, OutStream: TStream; Size: longword)
   : longword;
 var
    Buffer: TByteDynArray;
@@ -1451,7 +1451,7 @@ begin
    end;
 end;
 
-function TDCP_cipher.PartialEncryptStream(AStream: TMemoryStream;
+function TCipher.PartialEncryptStream(AStream: TMemoryStream;
   Size: longword): longword;
 var
    Buffer: PLongInt;
@@ -1465,7 +1465,7 @@ begin
    Encrypt(Buffer^, Buffer^, Size);
 end;
 
-function TDCP_cipher.PartialDecryptStream(AStream: TMemoryStream;
+function TCipher.PartialDecryptStream(AStream: TMemoryStream;
   Size: longword): longword;
 var
    Buffer: PLongInt;
@@ -1479,44 +1479,44 @@ begin
    Decrypt(Buffer^, Buffer^, Size);
 end;
 
-constructor TDCP_cipher.Create(AOwner: TComponent);
+constructor TCipher.Create(AOwner: TComponent);
 begin
    inherited Create(AOwner);
    Burn;
 end;
 
-destructor TDCP_cipher.Destroy;
+destructor TCipher.Destroy;
 begin
    if fInitialized then
       Burn;
    inherited Destroy;
 end;
 
-{ ** TDCP_blockcipher ********************************************************** }
+{ TBlockCipher }
 
-procedure TDCP_blockcipher.InitKey(const Key; Size: longword);
+procedure TBlockCipher.InitKey(const Key; Size: longword);
 begin
 end;
 
-function TDCP_blockcipher._GetBlockSize: integer;
+function TBlockCipher._GetBlockSize: integer;
 begin
    Result := GetBlockSize;
 end;
 
-class function TDCP_blockcipher.GetBlockSize: integer;
+class function TBlockCipher.GetBlockSize: integer;
 begin
    Result := -1;
 end;
 
-procedure TDCP_blockcipher.SetIV(const Value);
+procedure TBlockCipher.SetIV(const Value);
 begin
 end;
 
-procedure TDCP_blockcipher.GetIV(var Value);
+procedure TBlockCipher.GetIV(var Value);
 begin
 end;
 
-procedure TDCP_blockcipher.Encrypt(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher.Encrypt(const Indata; var Outdata; Size: longword);
 begin
    case fCipherMode of
       cmCBC:
@@ -1532,7 +1532,7 @@ begin
    end;
 end;
 
-procedure TDCP_blockcipher.Decrypt(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher.Decrypt(const Indata; var Outdata; Size: longword);
 begin
    case fCipherMode of
       cmCBC:
@@ -1548,73 +1548,73 @@ begin
    end;
 end;
 
-procedure TDCP_blockcipher.EncryptECB(const Indata; var Outdata);
+procedure TBlockCipher.EncryptECB(const Indata; var Outdata);
 begin
 end;
 
-procedure TDCP_blockcipher.DecryptECB(const Indata; var Outdata);
+procedure TBlockCipher.DecryptECB(const Indata; var Outdata);
 begin
 end;
 
-procedure TDCP_blockcipher.EncryptCBC(const Indata; var Outdata;
+procedure TBlockCipher.EncryptCBC(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.DecryptCBC(const Indata; var Outdata;
+procedure TBlockCipher.DecryptCBC(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.EncryptCFB8bit(const Indata; var Outdata;
+procedure TBlockCipher.EncryptCFB8bit(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.DecryptCFB8bit(const Indata; var Outdata;
+procedure TBlockCipher.DecryptCFB8bit(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.EncryptCFBblock(const Indata; var Outdata;
+procedure TBlockCipher.EncryptCFBblock(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.DecryptCFBblock(const Indata; var Outdata;
+procedure TBlockCipher.DecryptCFBblock(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.EncryptOFB(const Indata; var Outdata;
+procedure TBlockCipher.EncryptOFB(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.DecryptOFB(const Indata; var Outdata;
+procedure TBlockCipher.DecryptOFB(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.EncryptCTR(const Indata; var Outdata;
+procedure TBlockCipher.EncryptCTR(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-procedure TDCP_blockcipher.DecryptCTR(const Indata; var Outdata;
+procedure TBlockCipher.DecryptCTR(const Indata; var Outdata;
   Size: longword);
 begin
 end;
 
-constructor TDCP_blockcipher.Create(AOwner: TComponent);
+constructor TBlockCipher.Create(AOwner: TComponent);
 begin
    inherited Create(AOwner);
    fCipherMode := cmCBC;
 end;
 
-{** TDCP_blockcipher64 ********************************************************}
+{ TBlockCipher64 }
 
-procedure TDCP_blockcipher64.IncCounter;
+procedure TBlockCipher64.IncCounter;
 var
   i: integer;
 begin
@@ -1627,12 +1627,12 @@ begin
   end;
 end;
 
-class function TDCP_blockcipher64.GetBlockSize: integer;
+class function TBlockCipher64.GetBlockSize: integer;
 begin
   Result:= 64;
 end;
 
-procedure TDCP_blockcipher64.Init(const Key; Size: longword; InitVector: pointer);
+procedure TBlockCipher64.Init(const Key; Size: longword; InitVector: pointer);
 begin
   inherited Init(Key,Size,InitVector);
   InitKey(Key,Size);
@@ -1649,30 +1649,30 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.SetIV(const Value);
+procedure TBlockCipher64.SetIV(const Value);
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   Move(Value,IV,8);
   Reset;
 end;
 
-procedure TDCP_blockcipher64.GetIV(var Value);
+procedure TBlockCipher64.GetIV(var Value);
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   Move(CV,Value,8);
 end;
 
-procedure TDCP_blockcipher64.Reset;
+procedure TBlockCipher64.Reset;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized')
+    raise EBlockCipher.Create('Cipher not initialized')
   else
     Move(IV,CV,8);
 end;
 
-procedure TDCP_blockcipher64.Burn;
+procedure TBlockCipher64.Burn;
 begin
   FillChar(IV,8,$FF);
   FillChar(CV,8,$FF);
@@ -1691,13 +1691,13 @@ begin
       b1[i] := b1[i] xor b2[i];
 end;
 
-procedure TDCP_blockcipher64.EncryptCBC(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.EncryptCBC(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 8) do
@@ -1717,14 +1717,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.DecryptCBC(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.DecryptCBC(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
   Temp: array[0..7] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   FillChar(Temp, SizeOf(Temp), 0);
   p1:= @Indata;
   p2:= @Outdata;
@@ -1746,14 +1746,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: Pbyte;
   Temp: array[0..7] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1768,7 +1768,7 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: Pbyte;
@@ -1776,7 +1776,7 @@ var
   Temp: array[0..7] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1792,13 +1792,13 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.EncryptCFBblock(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.EncryptCFBblock(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 8) do
@@ -1818,14 +1818,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.DecryptCFBblock(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.DecryptCFBblock(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
   Temp: array[0..7] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1847,13 +1847,13 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.EncryptOFB(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.EncryptOFB(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 8) do
@@ -1872,13 +1872,13 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.DecryptOFB(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.DecryptOFB(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 8) do
@@ -1897,14 +1897,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.EncryptCTR(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.EncryptCTR(const Indata; var Outdata; Size: longword);
 var
   temp: array[0..7] of byte;
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1926,14 +1926,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher64.DecryptCTR(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher64.DecryptCTR(const Indata; var Outdata; Size: longword);
 var
   temp: array[0..7] of byte;
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -1955,9 +1955,9 @@ begin
   end;
 end;
 
-{** TDCP_blockcipher128 ********************************************************}
+{ TBlockCipher128 }
 
-procedure TDCP_blockcipher128.IncCounter;
+procedure TBlockCipher128.IncCounter;
 var
   i: integer;
 begin
@@ -1970,12 +1970,12 @@ begin
   end;
 end;
 
-class function TDCP_blockcipher128.GetBlockSize: integer;
+class function TBlockCipher128.GetBlockSize: integer;
 begin
   Result:= 128;
 end;
 
-procedure TDCP_blockcipher128.Init(const Key; Size: longword; InitVector: pointer);
+procedure TBlockCipher128.Init(const Key; Size: longword; InitVector: pointer);
 begin
   inherited Init(Key,Size,InitVector);
   InitKey(Key,Size);
@@ -1992,43 +1992,43 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.SetIV(const Value);
+procedure TBlockCipher128.SetIV(const Value);
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   Move(Value,IV,16);
   Reset;
 end;
 
-procedure TDCP_blockcipher128.GetIV(var Value);
+procedure TBlockCipher128.GetIV(var Value);
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   Move(CV,Value,16);
 end;
 
-procedure TDCP_blockcipher128.Reset;
+procedure TBlockCipher128.Reset;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized')
+    raise EBlockCipher.Create('Cipher not initialized')
   else
     Move(IV,CV,16);
 end;
 
-procedure TDCP_blockcipher128.Burn;
+procedure TBlockCipher128.Burn;
 begin
   FillChar(IV,16,$FF);
   FillChar(CV,16,$FF);
   inherited Burn;
 end;
 
-procedure TDCP_blockcipher128.EncryptCBC(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptCBC(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 16) do
@@ -2048,14 +2048,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.DecryptCBC(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptCBC(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
   Temp: array[0..15] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2077,14 +2077,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: Pbyte;
   Temp: array[0..15] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2099,7 +2099,7 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: Pbyte;
@@ -2107,7 +2107,7 @@ var
   Temp: array[0..15] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2123,13 +2123,13 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.EncryptCFBblock(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptCFBblock(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 16) do
@@ -2149,14 +2149,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.DecryptCFBblock(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptCFBblock(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
   Temp: array[0..15] of byte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2178,13 +2178,13 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.EncryptOFB(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptOFB(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 16) do
@@ -2203,13 +2203,13 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.DecryptOFB(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptOFB(const Indata; var Outdata; Size: longword);
 var
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   for i:= 1 to (Size div 16) do
@@ -2228,14 +2228,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.EncryptCTR(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptCTR(const Indata; var Outdata; Size: longword);
 var
   temp: array[0..15] of byte;
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
@@ -2257,14 +2257,14 @@ begin
   end;
 end;
 
-procedure TDCP_blockcipher128.DecryptCTR(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptCTR(const Indata; var Outdata; Size: longword);
 var
   temp: array[0..15] of byte;
   i: longword;
   p1, p2: PByte;
 begin
   if not fInitialized then
-    raise EDCP_blockcipher.Create('Cipher not initialized');
+    raise EBlockCipher.Create('Cipher not initialized');
   p1:= @Indata;
   p2:= @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);

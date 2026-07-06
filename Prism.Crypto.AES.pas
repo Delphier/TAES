@@ -29,9 +29,9 @@ uses
 
 class function TAES.Encrypt(const Data: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
 var
-  Cipher: TDCP_rijndael;
+  Cipher: TAESCipher;
 begin
-  Cipher := TDCP_rijndael.Create(nil);
+  Cipher := TAESCipher.Create(nil);
   try
     Cipher.Init(Key[0], KeySize, @InitVector[0]);
     // Copy Data => Crypt
@@ -71,10 +71,10 @@ end;
 
 class function TAES.Decrypt(const Crypt: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
 var
-  Cipher: TDCP_rijndael;
+  Cipher: TAESCipher;
   I: integer;
 begin
-  Cipher := TDCP_rijndael.Create(nil);
+  Cipher := TAESCipher.Create(nil);
   try
     Cipher.Init(Key[0], KeySize, @InitVector[0]);
     // Copy Crypt => Data
