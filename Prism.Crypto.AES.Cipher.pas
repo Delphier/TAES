@@ -1,56 +1,27 @@
 unit Prism.Crypto.AES.Cipher;
 
-{ From XE2 and up the following flag enables conditional compiled pointer-code changes  }
 {$IF CompilerVersion >= 23}
   {$DEFINE DELPHIXE2_UP}
   {$POINTERMATH ON}
 {$IFEND}
-
 
 interface
 
 uses
   System.Classes, System.SysUtils, System.Types;
 
-
-
-
-{ Enable this block to enable a unicode string Encrypt/Decrypt feature that is
-  completely NON-backwards compatible with the existing ANSI String version }
-
- {$ifdef UNICODE}
- {$define UNICODE_CIPHER}
- {$endif}
-
-{ ************************************ }
-{ A few predefined types to help out }
-{ ************************************ }
-
 type
-   Pbyte = ^byte;
-   Pword = ^word;
-   Pdword = ^dword;
-   Pint64 = ^int64;
-   dword = longword;
-   Pwordarray = ^Twordarray;
-   Twordarray = array [0 .. 19383] of word;
-   Pdwordarray = ^Tdwordarray;
-   Tdwordarray = array [0 .. 8191] of dword;
-
-type
-
-
+  Pdword = ^dword;
+  dword = longword;
+  Pwordarray = ^Twordarray;
+  Twordarray = array [0 .. 19383] of word;
+  Pdwordarray = ^Tdwordarray;
+  Tdwordarray = array [0 .. 8191] of dword;
 
 {$IFNDEF DELPHIXE2_UP}
    NativeInt = {$IFDEF WIN64} int64 {$ELSE} Longint {$ENDIF};
 {$ENDIF}
    PointerToInt = {$IFDEF DELPHIXE2_UP} Pbyte {$ELSE} NativeInt {$ENDIF};
-
-
-   { ****************************************************************************** }
-   { The base class from which all encryption components will be derived. }
-   { Stream ciphers will be derived directly from this class where as }
-   { Block ciphers will have a further foundation class TDCP_blockcipher. }
 
 type
    EDCP_cipher = class(Exception);
@@ -58,32 +29,14 @@ type
    TDCP_cipher = class(TComponent)
    protected
       fInitialized: boolean; { Whether or not the key setup has been done yet }
-
-      procedure DeadInt(Value: integer);
-      { Knudge to display vars in the object inspector }
-      procedure DeadStr(Value: string);
-      { Knudge to display vars in the object inspector }
-
    private
-      function _GetId: integer;
-      function _GetAlgorithm: string;
       function _GetMaxKeySize: integer;
-
    public
       property Initialized: boolean read fInitialized;
-
-      class function GetId: integer; virtual;
-      { Get the algorithm id }
-      class function GetAlgorithm: string; virtual;
-      { Get the algorithm name }
       class function GetMaxKeySize: integer; virtual;
       { Get the maximum key size (in bits) }
-      class function SelfTest: boolean; virtual;
-      { Tests the implementation with several test vectors }
-
       procedure Init(const Key; Size: longword; InitVector: pointer); virtual;
       { Do key setup based on the data in Key, size is in bits }
-
       procedure Burn; virtual;
       { Clear all stored key information }
       procedure Reset; virtual;
@@ -104,23 +57,14 @@ type
       function PartialDecryptStream(AStream: TMemoryStream; Size: longword)
         : longword;
       { Partially Decrypt up to 16K bytes of data in AStream }
-
       constructor Create(AOwner: TComponent); override;
       destructor Destroy; override;
-
    published
-      property Id: integer read _GetId write DeadInt;
-      property Algorithm: string read _GetAlgorithm write DeadStr;
-      property MaxKeySize: integer read _GetMaxKeySize write DeadInt;
+      property MaxKeySize: integer read _GetMaxKeySize;
    end;
 
    TDCP_cipherclass = class of TDCP_cipher;
 
-   { ****************************************************************************** }
-   { The base class from which all block ciphers are to be derived, this }
-   { extra class takes care of the different block encryption modes. }
-
-type
    TDCP_ciphermode = (cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR);
    // cmCFB8bit is equal to DCPcrypt v1.xx's CFB mode
    EDCP_blockcipher = class(EDCP_cipher);
@@ -128,12 +72,9 @@ type
    TDCP_blockcipher = class(TDCP_cipher)
    protected
       fCipherMode: TDCP_ciphermode; { The cipher mode the encrypt method uses }
-
       procedure InitKey(const Key; Size: longword); virtual;
-
    private
       function _GetBlockSize: integer;
-
    public
       class function GetBlockSize: integer; virtual;
       { Get the block size of the cipher (in bits) }
@@ -175,29 +116,15 @@ type
       { Encrypt size bytes of data using the CTR method of encryption }
       procedure DecryptCTR(const Indata; var Outdata; Size: longword); virtual;
       { Decrypt size bytes of data using the CTR method of decryption }
-
       constructor Create(AOwner: TComponent); override;
-
    published
-      property BlockSize: integer read _GetBlockSize write DeadInt;
+      property BlockSize: integer read _GetBlockSize;
       property CipherMode: TDCP_ciphermode read fCipherMode write fCipherMode
         default cmCBC;
    end;
 
    TDCP_blockcipherclass = class of TDCP_blockcipher;
 
-   { ****************************************************************************** }
-   { Helper functions }
-
-procedure XorBlock(var InData1, InData2; Size: longword);
-
-
-
-
-
-{******************************************************************************}
-    { Base type definition for 64 bit block ciphers }
-type
   TDCP_blockcipher64= class(TDCP_blockcipher)
   private
     IV, CV: array[0..7] of byte;
@@ -206,7 +133,6 @@ type
   public
     class function GetBlockSize: integer; override;
       { Get the block size of the cipher (in bits) }
-
     procedure Reset; override;
       { Reset any stored chaining information }
     procedure Burn; override;
@@ -217,7 +143,6 @@ type
       { Returns the current chaining information, not the actual IV }
     procedure Init(const Key; Size: longword; InitVector: pointer); override;
       { Do key setup based on the data in Key, size is in bits }
-
     procedure EncryptCBC(const Indata; var Outdata; Size: longword); override;
       { Encrypt size bytes of data using the CBC method of encryption }
     procedure DecryptCBC(const Indata; var Outdata; Size: longword); override;
@@ -240,9 +165,6 @@ type
       { Decrypt size bytes of data using the CTR method of decryption }
   end;
 
-{******************************************************************************}
-    { Base type definition for 128 bit block ciphers }
-type
   TDCP_blockcipher128= class(TDCP_blockcipher)
   private
     IV, CV: array[0..15] of byte;
@@ -251,7 +173,6 @@ type
   public
     class function GetBlockSize: integer; override;
       { Get the block size of the cipher (in bits) }
-
     procedure Reset; override;
       { Reset any stored chaining information }
     procedure Burn; override;
@@ -262,7 +183,6 @@ type
       { Returns the current chaining information, not the actual IV }
     procedure Init(const Key; Size: longword; InitVector: pointer); override;
       { Do key setup based on the data in Key, size is in bits }
-
     procedure EncryptCBC(const Indata; var Outdata; Size: longword); override;
       { Encrypt size bytes of data using the CBC method of encryption }
     procedure DecryptCBC(const Indata; var Outdata; Size: longword); override;
@@ -284,11 +204,6 @@ type
     procedure DecryptCTR(const Indata; var Outdata; Size: longword); override;
       { Decrypt size bytes of data using the CTR method of decryption }
   end;
-
-
-
-
-
 
 const
   BC= 4;
@@ -301,10 +216,7 @@ type
     rk, drk: array[0..MAXROUNDS,0..7] of DWord;
     procedure InitKey(const Key; Size: longword); override;
   public
-    class function GetId: integer; override;
-    class function GetAlgorithm: string; override;
     class function GetMaxKeySize: integer; override;
-    class function SelfTest: boolean; override;
     procedure Burn; override;
     procedure EncryptECB(const InData; var OutData); override;
     procedure DecryptECB(const InData; var OutData); override;
@@ -313,9 +225,6 @@ type
 implementation
 
 {$R-}{$Q-}
-
-
-
 
 const
   MAXBC= 8;
@@ -1188,74 +1097,9 @@ const
     $01, $02, $04, $08, $10, $20, $40, $80, $1b, $36, $6c, $d8, $ab, $4d, $9a,
     $2f, $5e, $bc, $63, $c6, $97, $35, $6a, $d4, $b3, $7d, $fa, $ef, $c5, $91);
 
-
-{$IFDEF DELPHIXE2_UP}
-  {$POINTERMATH ON}
-{$ENDIF}
-
 class function TDCP_rijndael.GetMaxKeySize: integer;
 begin
   Result:= 256;
-end;
-
-class function TDCP_rijndael.GetID: integer;
-begin
-  //remove?
-  Result:= 9;
-end;
-
-class function TDCP_rijndael.GetAlgorithm: string;
-begin
-  Result:= 'Rijndael';
-end;
-
-class function TDCP_rijndael.SelfTest: boolean;
-const
-  Key1: array[0..15] of byte=
-    ($00,$01,$02,$03,$05,$06,$07,$08,$0A,$0B,$0C,$0D,$0F,$10,$11,$12);
-  InData1: array[0..15] of byte=
-    ($50,$68,$12,$A4,$5F,$08,$C8,$89,$B9,$7F,$59,$80,$03,$8B,$83,$59);
-  OutData1: array[0..15] of byte=
-    ($D8,$F5,$32,$53,$82,$89,$EF,$7D,$06,$B5,$06,$A4,$FD,$5B,$E9,$C9);
-  Key2: array[0..23] of byte=
-    ($A0,$A1,$A2,$A3,$A5,$A6,$A7,$A8,$AA,$AB,$AC,$AD,$AF,$B0,$B1,$B2,
-     $B4,$B5,$B6,$B7,$B9,$BA,$BB,$BC);
-  InData2: array[0..15] of byte=
-    ($4F,$1C,$76,$9D,$1E,$5B,$05,$52,$C7,$EC,$A8,$4D,$EA,$26,$A5,$49);
-  OutData2: array[0..15] of byte=
-    ($F3,$84,$72,$10,$D5,$39,$1E,$23,$60,$60,$8E,$5A,$CB,$56,$05,$81);
-  Key3: array[0..31] of byte=
-    ($00,$01,$02,$03,$05,$06,$07,$08,$0A,$0B,$0C,$0D,$0F,$10,$11,$12,
-     $14,$15,$16,$17,$19,$1A,$1B,$1C,$1E,$1F,$20,$21,$23,$24,$25,$26);
-  InData3: array[0..15] of byte=
-    ($5E,$25,$CA,$78,$F0,$DE,$55,$80,$25,$24,$D3,$8D,$A3,$FE,$44,$56);
-  OutData3: array[0..15] of byte=
-    ($E8,$B7,$2B,$4E,$8B,$E2,$43,$43,$8C,$9F,$FF,$1F,$0E,$20,$58,$72);
-var
-  Block: array[0..15] of byte;
-  Cipher: TDCP_rijndael;
-begin
-  FillChar(Block, SizeOf(Block), 0);
-  Cipher:= TDCP_rijndael.Create(nil);
-  Cipher.Init(Key1,Sizeof(Key1)*8,nil);
-  Cipher.EncryptECB(InData1,Block);
-  Result:= boolean(CompareMem(@Block,@OutData1,16));
-  Cipher.DecryptECB(Block,Block);
-  Cipher.Burn;
-  Result:= Result and boolean(CompareMem(@Block,@InData1,16));
-  Cipher.Init(Key2,Sizeof(Key2)*8,nil);
-  Cipher.EncryptECB(InData2,Block);
-  Result:= Result and boolean(CompareMem(@Block,@OutData2,16));
-  Cipher.DecryptECB(Block,Block);
-  Cipher.Burn;
-  Result:= Result and boolean(CompareMem(@Block,@InData2,16));
-  Cipher.Init(Key3,Sizeof(Key3)*8,nil);
-  Cipher.EncryptECB(InData3,Block);
-  Result:= Result and boolean(CompareMem(@Block,@OutData3,16));
-  Cipher.DecryptECB(Block,Block);
-  Cipher.Burn;
-  Result:= Result and boolean(CompareMem(@Block,@InData3,16));
-  Cipher.Free;
 end;
 
 procedure InvMixColumn(a: PByteArray; BC: byte);
@@ -1496,57 +1340,16 @@ begin
   PDword(PointerToInt(@OutData)+12)^:= PDword(@a[3,0])^;
 end;
 
-
-
-
-
-
-
-
-
 { ** TDCP_cipher *************************************************************** }
-
-procedure TDCP_cipher.DeadInt(Value: integer);
-begin
-end;
-
-procedure TDCP_cipher.DeadStr(Value: string);
-begin
-end;
-
-function TDCP_cipher._GetId: integer;
-begin
-   Result := GetId;
-end;
-
-function TDCP_cipher._GetAlgorithm: string;
-begin
-   Result := GetAlgorithm;
-end;
 
 function TDCP_cipher._GetMaxKeySize: integer;
 begin
    Result := GetMaxKeySize;
 end;
 
-class function TDCP_cipher.GetId: integer;
-begin
-   Result := -1;
-end;
-
-class function TDCP_cipher.GetAlgorithm: string;
-begin
-   Result := '';
-end;
-
 class function TDCP_cipher.GetMaxKeySize: integer;
 begin
    Result := -1;
-end;
-
-class function TDCP_cipher.SelfTest: boolean;
-begin
-   Result := false;
 end;
 
 procedure TDCP_cipher.Init(const Key; Size: longword; InitVector: pointer);
@@ -1581,7 +1384,6 @@ const
    EncryptBufSize = 1024 * 1024 * 8; // 8 Megs
    EncryptLimit = (16 * 1024); // 16K operation size
 
-   // modified by SR - 10/6/2003
 function TDCP_cipher.EncryptStream(InStream, OutStream: TStream; Size: longword)
   : longword;
 var
@@ -1616,7 +1418,6 @@ begin
    end;
 end;
 
-// modified by SR - 10/6/2003
 function TDCP_cipher.DecryptStream(InStream, OutStream: TStream; Size: longword)
   : longword;
 var
@@ -1648,6 +1449,34 @@ begin
       Decrypt(Buffer[0], Buffer[0], Read);
       OutStream.Write(Buffer[0], Read);
    end;
+end;
+
+function TDCP_cipher.PartialEncryptStream(AStream: TMemoryStream;
+  Size: longword): longword;
+var
+   Buffer: PLongInt;
+begin
+   if Size > EncryptLimit then
+      Size := EncryptLimit;
+
+   Result := Size;
+   Buffer := PLongInt(AStream.Memory);
+   // only process the limited size:
+   Encrypt(Buffer^, Buffer^, Size);
+end;
+
+function TDCP_cipher.PartialDecryptStream(AStream: TMemoryStream;
+  Size: longword): longword;
+var
+   Buffer: PLongInt;
+begin
+   if Size > EncryptLimit then
+      Size := EncryptLimit;
+
+   Result := Size;
+   Buffer := PLongInt(AStream.Memory);
+   // only process the limited size:
+   Decrypt(Buffer^, Buffer^, Size);
 end;
 
 constructor TDCP_cipher.Create(AOwner: TComponent);
@@ -1783,60 +1612,6 @@ begin
    fCipherMode := cmCBC;
 end;
 
-{ ** Helper functions ********************************************************* }
-procedure XorBlock(var InData1, InData2; Size: longword);
-var
-   b1: PByteArray;
-   b2: PByteArray;
-   i: longword;
-begin
-   b1 := @InData1;
-   b2 := @InData2;
-   for i := 0 to Size - 1 do
-      b1[i] := b1[i] xor b2[i];
-end;
-
-{ ** RECENT Additions after Version 2.0 ** }
-
-// Version 2.1 : Partial Stream Read capability.
-function TDCP_cipher.PartialDecryptStream(AStream: TMemoryStream;
-  Size: longword): longword;
-var
-   Buffer: PLongInt;
-begin
-   if Size > EncryptLimit then
-      Size := EncryptLimit;
-
-   Result := Size;
-   Buffer := PLongInt(AStream.Memory);
-   // only process the limited size:
-   Decrypt(Buffer^, Buffer^, Size);
-end;
-
-// Version 2.1 : Partial Stream Read capability.
-function TDCP_cipher.PartialEncryptStream(AStream: TMemoryStream;
-  Size: longword): longword;
-var
-   Buffer: PLongInt;
-begin
-   if Size > EncryptLimit then
-      Size := EncryptLimit;
-
-   Result := Size;
-   Buffer := PLongInt(AStream.Memory);
-   // only process the limited size:
-   Encrypt(Buffer^, Buffer^, Size);
-end;
-
-
-
-
-
-
-
-
-
-
 {** TDCP_blockcipher64 ********************************************************}
 
 procedure TDCP_blockcipher64.IncCounter;
@@ -1902,6 +1677,18 @@ begin
   FillChar(IV,8,$FF);
   FillChar(CV,8,$FF);
   inherited Burn;
+end;
+
+procedure XorBlock(var InData1, InData2; Size: longword);
+var
+   b1: PByteArray;
+   b2: PByteArray;
+   i: longword;
+begin
+   b1 := @InData1;
+   b2 := @InData2;
+   for i := 0 to Size - 1 do
+      b1[i] := b1[i] xor b2[i];
 end;
 
 procedure TDCP_blockcipher64.EncryptCBC(const Indata; var Outdata; Size: longword);
