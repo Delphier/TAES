@@ -32,6 +32,8 @@ type
    private
       function _GetMaxKeySize: integer;
    public
+      constructor Create(AOwner: TComponent); override;
+      destructor Destroy; override;
       property Initialized: boolean read fInitialized;
       class function GetMaxKeySize: integer; virtual;
       { Get the maximum key size (in bits) }
@@ -57,8 +59,6 @@ type
       function PartialDecryptStream(AStream: TMemoryStream; Size: longword)
         : longword;
       { Partially Decrypt up to 16K bytes of data in AStream }
-      constructor Create(AOwner: TComponent); override;
-      destructor Destroy; override;
    published
       property MaxKeySize: integer read _GetMaxKeySize;
    end;
@@ -77,6 +77,7 @@ type
    private
       function _GetBlockSize: integer;
    public
+      constructor Create(AOwner: TComponent); override;
       class function GetBlockSize: integer; virtual;
       { Get the block size of the cipher (in bits) }
 
@@ -117,7 +118,6 @@ type
       { Encrypt size bytes of data using the CTR method of encryption }
       procedure DecryptCTR(const Indata; var Outdata; Size: longword); virtual;
       { Decrypt size bytes of data using the CTR method of decryption }
-      constructor Create(AOwner: TComponent); override;
    published
       property BlockSize: integer read _GetBlockSize;
       property CipherMode: TCipherMode read FCipherMode write FCipherMode
@@ -204,15 +204,10 @@ type
       { Decrypt size bytes of data using the CTR method of decryption }
   end;
 
-const
-  BC= 4;
-  MAXROUNDS= 14;
-
-type
   TAESCipher = class(TBlockCipher128)
   protected
     numrounds: longword;
-    rk, drk: array[0..MAXROUNDS,0..7] of DWord;
+    rk, drk: array[0..14,0..7] of DWord;
     procedure InitKey(const Key; Size: longword); override;
   public
     class function GetMaxKeySize: integer; override;
@@ -225,9 +220,934 @@ implementation
 
 {$R-}{$Q-}
 
+{ TCipher }
+
+constructor TCipher.Create(AOwner: TComponent);
+begin
+   inherited Create(AOwner);
+   Burn;
+end;
+
+destructor TCipher.Destroy;
+begin
+   if fInitialized then
+      Burn;
+   inherited Destroy;
+end;
+
+function TCipher._GetMaxKeySize: integer;
+begin
+   Result := GetMaxKeySize;
+end;
+
+class function TCipher.GetMaxKeySize: integer;
+begin
+   Result := -1;
+end;
+
+procedure TCipher.Init(const Key; Size: longword; InitVector: pointer);
+begin
+   if fInitialized then
+      Burn;
+   if (Size <= 0) or ((Size and 3) <> 0) or (Size > longword(GetMaxKeySize))
+   then
+      raise ECipher.Create('Invalid key size')
+   else
+      fInitialized := true;
+end;
+
+procedure TCipher.Burn;
+begin
+   fInitialized := false;
+end;
+
+procedure TCipher.Reset;
+begin
+end;
+
+procedure TCipher.Encrypt(const Indata; var Outdata; Size: longword);
+begin
+end;
+
+procedure TCipher.Decrypt(const Indata; var Outdata; Size: longword);
+begin
+end;
+
+const
+   EncryptBufSize = 1024 * 1024 * 8; // 8 Megs
+   EncryptLimit = (16 * 1024); // 16K operation size
+
+function TCipher.EncryptStream(InStream, OutStream: TStream; Size: longword)
+  : longword;
+var
+   Buffer: TByteDynArray;
+   i, read: longword;
+   Range: longword;
+   Remainder: longword;
+begin
+   Result := 0;
+
+   if Size < EncryptBufSize then
+      SetLength(Buffer, Size)
+   else
+      SetLength(Buffer, EncryptBufSize);
+
+   Range := Size div longword(Length(Buffer));
+   for i := 1 to Range do
+   begin
+      Read := InStream.read(Buffer[0], Length(Buffer));
+      Inc(Result, Read);
+      Encrypt(Buffer[0], Buffer[0], Read);
+      OutStream.Write(Buffer[0], Read);
+   end;
+
+   Remainder := Size mod longword(Length(Buffer));
+   if Remainder <> 0 then
+   begin
+      Read := InStream.read(Buffer[0], Remainder);
+      Inc(Result, Read);
+      Encrypt(Buffer[0], Buffer[0], Read);
+      OutStream.Write(Buffer[0], Read);
+   end;
+end;
+
+function TCipher.DecryptStream(InStream, OutStream: TStream; Size: longword)
+  : longword;
+var
+   Buffer: TByteDynArray;
+   i, read: longword;
+   Range: longword;
+   Remainder: longword;
+begin
+   Result := 0;
+   if Size < EncryptBufSize then
+      SetLength(Buffer, Size)
+   else
+      SetLength(Buffer, EncryptBufSize);
+
+   Range := Size div longword(Length(Buffer));
+   for i := 1 to Range do
+   begin
+      Read := InStream.read(Buffer[0], Length(Buffer));
+      Inc(Result, Read);
+      Decrypt(Buffer[0], Buffer[0], Read);
+      OutStream.Write(Buffer[0], Read);
+   end;
+
+   Remainder := Size mod longword(Length(Buffer));
+   if Remainder <> 0 then
+   begin
+      Read := InStream.read(Buffer[0], Remainder);
+      Inc(Result, Read);
+      Decrypt(Buffer[0], Buffer[0], Read);
+      OutStream.Write(Buffer[0], Read);
+   end;
+end;
+
+function TCipher.PartialEncryptStream(AStream: TMemoryStream;
+  Size: longword): longword;
+var
+   Buffer: PLongInt;
+begin
+   if Size > EncryptLimit then
+      Size := EncryptLimit;
+
+   Result := Size;
+   Buffer := PLongInt(AStream.Memory);
+   // only process the limited size:
+   Encrypt(Buffer^, Buffer^, Size);
+end;
+
+function TCipher.PartialDecryptStream(AStream: TMemoryStream;
+  Size: longword): longword;
+var
+   Buffer: PLongInt;
+begin
+   if Size > EncryptLimit then
+      Size := EncryptLimit;
+
+   Result := Size;
+   Buffer := PLongInt(AStream.Memory);
+   // only process the limited size:
+   Decrypt(Buffer^, Buffer^, Size);
+end;
+
+{ TBlockCipher }
+
+constructor TBlockCipher.Create(AOwner: TComponent);
+begin
+   inherited Create(AOwner);
+   fCipherMode := cmCBC;
+end;
+
+procedure TBlockCipher.CheckInitialized;
+begin
+  if not FInitialized then
+    raise EBlockCipher.Create('Cipher not initialized');
+end;
+
+procedure TBlockCipher.InitKey(const Key; Size: longword);
+begin
+end;
+
+function TBlockCipher._GetBlockSize: integer;
+begin
+   Result := GetBlockSize;
+end;
+
+class function TBlockCipher.GetBlockSize: integer;
+begin
+   Result := -1;
+end;
+
+procedure TBlockCipher.SetIV(const Value);
+begin
+end;
+
+procedure TBlockCipher.GetIV(var Value);
+begin
+end;
+
+procedure TBlockCipher.Encrypt(const Indata; var Outdata; Size: longword);
+begin
+   case fCipherMode of
+      cmCBC:
+         EncryptCBC(Indata, Outdata, Size);
+      cmCFB8bit:
+         EncryptCFB8bit(Indata, Outdata, Size);
+      cmCFBblock:
+         EncryptCFBblock(Indata, Outdata, Size);
+      cmOFB:
+         EncryptOFB(Indata, Outdata, Size);
+      cmCTR:
+         EncryptCTR(Indata, Outdata, Size);
+   end;
+end;
+
+procedure TBlockCipher.Decrypt(const Indata; var Outdata; Size: longword);
+begin
+   case fCipherMode of
+      cmCBC:
+         DecryptCBC(Indata, Outdata, Size);
+      cmCFB8bit:
+         DecryptCFB8bit(Indata, Outdata, Size);
+      cmCFBblock:
+         DecryptCFBblock(Indata, Outdata, Size);
+      cmOFB:
+         DecryptOFB(Indata, Outdata, Size);
+      cmCTR:
+         DecryptCTR(Indata, Outdata, Size);
+   end;
+end;
+
+procedure TBlockCipher.EncryptECB(const Indata; var Outdata);
+begin
+end;
+
+procedure TBlockCipher.DecryptECB(const Indata; var Outdata);
+begin
+end;
+
+procedure TBlockCipher.EncryptCBC(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.DecryptCBC(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.EncryptCFB8bit(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.DecryptCFB8bit(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.EncryptCFBblock(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.DecryptCFBblock(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.EncryptOFB(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.DecryptOFB(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.EncryptCTR(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+procedure TBlockCipher.DecryptCTR(const Indata; var Outdata;
+  Size: longword);
+begin
+end;
+
+{ TBlockCipher64 }
+
+procedure TBlockCipher64.IncCounter;
+var
+  i: integer;
+begin
+  Inc(CV[7]);
+  i:= 7;
+  while (i> 0) and (CV[i] = 0) do
+  begin
+    Inc(CV[i-1]);
+    Dec(i);
+  end;
+end;
+
+class function TBlockCipher64.GetBlockSize: integer;
+begin
+  Result:= 64;
+end;
+
+procedure TBlockCipher64.Init(const Key; Size: longword; InitVector: pointer);
+begin
+  inherited Init(Key,Size,InitVector);
+  InitKey(Key,Size);
+  if InitVector= nil then
+  begin
+    FillChar(IV,8,{$IFDEF DCP1COMPAT}$FF{$ELSE}0{$ENDIF});
+    EncryptECB(IV,IV);
+    Reset;
+  end
+  else
+  begin
+    Move(InitVector^,IV,8);
+    Reset;
+  end;
+end;
+
+procedure TBlockCipher64.SetIV(const Value);
+begin
+  CheckInitialized;
+  Move(Value,IV,8);
+  Reset;
+end;
+
+procedure TBlockCipher64.GetIV(var Value);
+begin
+  CheckInitialized;
+  Move(CV,Value,8);
+end;
+
+procedure TBlockCipher64.Reset;
+begin
+  CheckInitialized;
+  Move(IV,CV,8);
+end;
+
+procedure TBlockCipher64.Burn;
+begin
+  FillChar(IV,8,$FF);
+  FillChar(CV,8,$FF);
+  inherited Burn;
+end;
+
+procedure XorBlock(var InData1, InData2; Size: longword);
+var
+   b1: PByteArray;
+   b2: PByteArray;
+   i: longword;
+begin
+   b1 := @InData1;
+   b2 := @InData2;
+   for i := 0 to Size - 1 do
+      b1[i] := b1[i] xor b2[i];
+end;
+
+procedure TBlockCipher64.EncryptCBC(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 8) do
+  begin
+    Move(p1^,p2^,8);
+    XorBlock(p2^,CV,8);
+    EncryptECB(p2^,p2^);
+    Move(p2^,CV,8);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
+  end;
+  if (Size mod 8)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 8);
+    XorBlock(p2^,CV,Size mod 8);
+  end;
+end;
+
+procedure TBlockCipher64.DecryptCBC(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+  Temp: array[0..7] of byte;
+begin
+  CheckInitialized;
+  FillChar(Temp, SizeOf(Temp), 0);
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 8) do
+  begin
+    Move(p1^,p2^,8);
+    Move(p1^,Temp,8);
+    DecryptECB(p2^,p2^);
+    XorBlock(p2^,CV,8);
+    Move(Temp,CV,8);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
+  end;
+  if (Size mod 8)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 8);
+    XorBlock(p2^,CV,Size mod 8);
+  end;
+end;
+
+procedure TBlockCipher64.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: Pbyte;
+  Temp: array[0..7] of byte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to Size do
+  begin
+    EncryptECB(CV,Temp);
+    p2^:= p1^ xor Temp[0];
+    Move(CV[1],CV[0],8-1);
+    CV[7]:= p2^;
+    Inc(p1);
+    Inc(p2);
+  end;
+end;
+
+procedure TBlockCipher64.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: Pbyte;
+  TempByte: byte;
+  Temp: array[0..7] of byte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to Size do
+  begin
+    TempByte:= p1^;
+    EncryptECB(CV,Temp);
+    p2^:= p1^ xor Temp[0];
+    Move(CV[1],CV[0],8-1);
+    CV[7]:= TempByte;
+    Inc(p1);
+    Inc(p2);
+  end;
+end;
+
+procedure TBlockCipher64.EncryptCFBblock(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 8) do
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,8);
+    XorBlock(p2^,CV,8);
+    Move(p2^,CV,8);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
+  end;
+  if (Size mod 8)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 8);
+    XorBlock(p2^,CV,Size mod 8);
+  end;
+end;
+
+procedure TBlockCipher64.DecryptCFBblock(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+  Temp: array[0..7] of byte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to (Size div 8) do
+  begin
+    Move(p1^,Temp,8);
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,8);
+    XorBlock(p2^,CV,8);
+    Move(Temp,CV,8);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
+  end;
+  if (Size mod 8)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 8);
+    XorBlock(p2^,CV,Size mod 8);
+  end;
+end;
+
+procedure TBlockCipher64.EncryptOFB(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 8) do
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,8);
+    XorBlock(p2^,CV,8);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
+  end;
+  if (Size mod 8)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 8);
+    XorBlock(p2^,CV,Size mod 8);
+  end;
+end;
+
+procedure TBlockCipher64.DecryptOFB(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 8) do
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,8);
+    XorBlock(p2^,CV,8);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
+  end;
+  if (Size mod 8)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 8);
+    XorBlock(p2^,CV,Size mod 8);
+  end;
+end;
+
+procedure TBlockCipher64.EncryptCTR(const Indata; var Outdata; Size: longword);
+var
+  temp: array[0..7] of byte;
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to (Size div 8) do
+  begin
+    EncryptECB(CV,temp);
+    IncCounter;
+    Move(p1^,p2^,8);
+    XorBlock(p2^,temp,8);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
+  end;
+  if (Size mod 8)<> 0 then
+  begin
+    EncryptECB(CV,temp);
+    IncCounter;
+    Move(p1^,p2^,Size mod 8);
+    XorBlock(p2^,temp,Size mod 8);
+  end;
+end;
+
+procedure TBlockCipher64.DecryptCTR(const Indata; var Outdata; Size: longword);
+var
+  temp: array[0..7] of byte;
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to (Size div 8) do
+  begin
+    EncryptECB(CV,temp);
+    IncCounter;
+    Move(p1^,p2^,8);
+    XorBlock(p2^,temp,8);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
+  end;
+  if (Size mod 8)<> 0 then
+  begin
+    EncryptECB(CV,temp);
+    IncCounter;
+    Move(p1^,p2^,Size mod 8);
+    XorBlock(p2^,temp,Size mod 8);
+  end;
+end;
+
+{ TBlockCipher128 }
+
+procedure TBlockCipher128.IncCounter;
+var
+  i: integer;
+begin
+  Inc(CV[15]);
+  i:= 15;
+  while (i> 0) and (CV[i] = 0) do
+  begin
+    Inc(CV[i-1]);
+    Dec(i);
+  end;
+end;
+
+class function TBlockCipher128.GetBlockSize: integer;
+begin
+  Result:= 128;
+end;
+
+procedure TBlockCipher128.Init(const Key; Size: longword; InitVector: pointer);
+begin
+  inherited Init(Key,Size,InitVector);
+  InitKey(Key,Size);
+  if InitVector= nil then
+  begin
+    FillChar(IV,16,{$IFDEF DCP1COMPAT}$FF{$ELSE}0{$ENDIF});
+    EncryptECB(IV,IV);
+    Reset;
+  end
+  else
+  begin
+    Move(InitVector^,IV,16);
+    Reset;
+  end;
+end;
+
+procedure TBlockCipher128.SetIV(const Value);
+begin
+  CheckInitialized;
+  Move(Value,IV,16);
+  Reset;
+end;
+
+procedure TBlockCipher128.GetIV(var Value);
+begin
+  CheckInitialized;
+  Move(CV,Value,16);
+end;
+
+procedure TBlockCipher128.Reset;
+begin
+  CheckInitialized;
+  Move(IV,CV,16);
+end;
+
+procedure TBlockCipher128.Burn;
+begin
+  FillChar(IV,16,$FF);
+  FillChar(CV,16,$FF);
+  inherited Burn;
+end;
+
+procedure TBlockCipher128.EncryptCBC(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 16) do
+  begin
+    Move(p1^,p2^,16);
+    XorBlock(p2^,CV,16);
+    EncryptECB(p2^,p2^);
+    Move(p2^,CV,16);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 16);
+    XorBlock(p2^,CV,Size mod 16);
+  end;
+end;
+
+procedure TBlockCipher128.DecryptCBC(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+  Temp: array[0..15] of byte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to (Size div 16) do
+  begin
+    Move(p1^,p2^,16);
+    Move(p1^,Temp,16);
+    DecryptECB(p2^,p2^);
+    XorBlock(p2^,CV,16);
+    Move(Temp,CV,16);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 16);
+    XorBlock(p2^,CV,Size mod 16);
+  end;
+end;
+
+procedure TBlockCipher128.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: Pbyte;
+  Temp: array[0..15] of byte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to Size do
+  begin
+    EncryptECB(CV,Temp);
+    p2^:= p1^ xor Temp[0];
+    Move(CV[1],CV[0],15);
+    CV[15]:= p2^;
+    Inc(p1);
+    Inc(p2);
+  end;
+end;
+
+procedure TBlockCipher128.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: Pbyte;
+  TempByte: byte;
+  Temp: array[0..15] of byte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to Size do
+  begin
+    TempByte:= p1^;
+    EncryptECB(CV,Temp);
+    p2^:= p1^ xor Temp[0];
+    Move(CV[1],CV[0],15);
+    CV[15]:= TempByte;
+    Inc(p1);
+    Inc(p2);
+  end;
+end;
+
+procedure TBlockCipher128.EncryptCFBblock(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 16) do
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,16);
+    XorBlock(p2^,CV,16);
+    Move(p2^,CV,16);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 16);
+    XorBlock(p2^,CV,Size mod 16);
+  end;
+end;
+
+procedure TBlockCipher128.DecryptCFBblock(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+  Temp: array[0..15] of byte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to (Size div 16) do
+  begin
+    Move(p1^,Temp,16);
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,16);
+    XorBlock(p2^,CV,16);
+    Move(Temp,CV,16);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 16);
+    XorBlock(p2^,CV,Size mod 16);
+  end;
+end;
+
+procedure TBlockCipher128.EncryptOFB(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 16) do
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,16);
+    XorBlock(p2^,CV,16);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 16);
+    XorBlock(p2^,CV,Size mod 16);
+  end;
+end;
+
+procedure TBlockCipher128.DecryptOFB(const Indata; var Outdata; Size: longword);
+var
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  for i:= 1 to (Size div 16) do
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,16);
+    XorBlock(p2^,CV,16);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16)<> 0 then
+  begin
+    EncryptECB(CV,CV);
+    Move(p1^,p2^,Size mod 16);
+    XorBlock(p2^,CV,Size mod 16);
+  end;
+end;
+
+procedure TBlockCipher128.EncryptCTR(const Indata; var Outdata; Size: longword);
+var
+  temp: array[0..15] of byte;
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to (Size div 16) do
+  begin
+    EncryptECB(CV,temp);
+    IncCounter;
+    Move(p1^,p2^,16);
+    XorBlock(p2^,temp,16);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16)<> 0 then
+  begin
+    EncryptECB(CV,temp);
+    IncCounter;
+    Move(p1^,p2^,Size mod 16);
+    XorBlock(p2^,temp,Size mod 16);
+  end;
+end;
+
+procedure TBlockCipher128.DecryptCTR(const Indata; var Outdata; Size: longword);
+var
+  temp: array[0..15] of byte;
+  i: longword;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1:= @Indata;
+  p2:= @Outdata;
+  FillChar(Temp, SizeOf(Temp), 0);
+  for i:= 1 to (Size div 16) do
+  begin
+    EncryptECB(CV,temp);
+    IncCounter;
+    Move(p1^,p2^,16);
+    XorBlock(p2^,temp,16);
+    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16)<> 0 then
+  begin
+    EncryptECB(CV,temp);
+    IncCounter;
+    Move(p1^,p2^,Size mod 16);
+    XorBlock(p2^,temp,Size mod 16);
+  end;
+end;
+
 { TAESCipher }
 
 const
+  BC= 4;
   MAXBC= 8;
   MAXKC= 8;
 
@@ -1337,930 +2257,6 @@ begin
   PDword(PointerToInt(@OutData)+4)^:= PDword(@a[1,0])^;
   PDword(PointerToInt(@OutData)+8)^:= PDword(@a[2,0])^;
   PDword(PointerToInt(@OutData)+12)^:= PDword(@a[3,0])^;
-end;
-
-{ TCipher }
-
-function TCipher._GetMaxKeySize: integer;
-begin
-   Result := GetMaxKeySize;
-end;
-
-class function TCipher.GetMaxKeySize: integer;
-begin
-   Result := -1;
-end;
-
-procedure TCipher.Init(const Key; Size: longword; InitVector: pointer);
-begin
-   if fInitialized then
-      Burn;
-   if (Size <= 0) or ((Size and 3) <> 0) or (Size > longword(GetMaxKeySize))
-   then
-      raise ECipher.Create('Invalid key size')
-   else
-      fInitialized := true;
-end;
-
-procedure TCipher.Burn;
-begin
-   fInitialized := false;
-end;
-
-procedure TCipher.Reset;
-begin
-end;
-
-procedure TCipher.Encrypt(const Indata; var Outdata; Size: longword);
-begin
-end;
-
-procedure TCipher.Decrypt(const Indata; var Outdata; Size: longword);
-begin
-end;
-
-const
-   EncryptBufSize = 1024 * 1024 * 8; // 8 Megs
-   EncryptLimit = (16 * 1024); // 16K operation size
-
-function TCipher.EncryptStream(InStream, OutStream: TStream; Size: longword)
-  : longword;
-var
-   Buffer: TByteDynArray;
-   i, read: longword;
-   Range: longword;
-   Remainder: longword;
-begin
-   Result := 0;
-
-   if Size < EncryptBufSize then
-      SetLength(Buffer, Size)
-   else
-      SetLength(Buffer, EncryptBufSize);
-
-   Range := Size div longword(Length(Buffer));
-   for i := 1 to Range do
-   begin
-      Read := InStream.read(Buffer[0], Length(Buffer));
-      Inc(Result, Read);
-      Encrypt(Buffer[0], Buffer[0], Read);
-      OutStream.Write(Buffer[0], Read);
-   end;
-
-   Remainder := Size mod longword(Length(Buffer));
-   if Remainder <> 0 then
-   begin
-      Read := InStream.read(Buffer[0], Remainder);
-      Inc(Result, Read);
-      Encrypt(Buffer[0], Buffer[0], Read);
-      OutStream.Write(Buffer[0], Read);
-   end;
-end;
-
-function TCipher.DecryptStream(InStream, OutStream: TStream; Size: longword)
-  : longword;
-var
-   Buffer: TByteDynArray;
-   i, read: longword;
-   Range: longword;
-   Remainder: longword;
-begin
-   Result := 0;
-   if Size < EncryptBufSize then
-      SetLength(Buffer, Size)
-   else
-      SetLength(Buffer, EncryptBufSize);
-
-   Range := Size div longword(Length(Buffer));
-   for i := 1 to Range do
-   begin
-      Read := InStream.read(Buffer[0], Length(Buffer));
-      Inc(Result, Read);
-      Decrypt(Buffer[0], Buffer[0], Read);
-      OutStream.Write(Buffer[0], Read);
-   end;
-
-   Remainder := Size mod longword(Length(Buffer));
-   if Remainder <> 0 then
-   begin
-      Read := InStream.read(Buffer[0], Remainder);
-      Inc(Result, Read);
-      Decrypt(Buffer[0], Buffer[0], Read);
-      OutStream.Write(Buffer[0], Read);
-   end;
-end;
-
-function TCipher.PartialEncryptStream(AStream: TMemoryStream;
-  Size: longword): longword;
-var
-   Buffer: PLongInt;
-begin
-   if Size > EncryptLimit then
-      Size := EncryptLimit;
-
-   Result := Size;
-   Buffer := PLongInt(AStream.Memory);
-   // only process the limited size:
-   Encrypt(Buffer^, Buffer^, Size);
-end;
-
-function TCipher.PartialDecryptStream(AStream: TMemoryStream;
-  Size: longword): longword;
-var
-   Buffer: PLongInt;
-begin
-   if Size > EncryptLimit then
-      Size := EncryptLimit;
-
-   Result := Size;
-   Buffer := PLongInt(AStream.Memory);
-   // only process the limited size:
-   Decrypt(Buffer^, Buffer^, Size);
-end;
-
-constructor TCipher.Create(AOwner: TComponent);
-begin
-   inherited Create(AOwner);
-   Burn;
-end;
-
-destructor TCipher.Destroy;
-begin
-   if fInitialized then
-      Burn;
-   inherited Destroy;
-end;
-
-{ TBlockCipher }
-
-procedure TBlockCipher.CheckInitialized;
-begin
-  if not FInitialized then
-    raise EBlockCipher.Create('Cipher not initialized');
-end;
-
-procedure TBlockCipher.InitKey(const Key; Size: longword);
-begin
-end;
-
-function TBlockCipher._GetBlockSize: integer;
-begin
-   Result := GetBlockSize;
-end;
-
-class function TBlockCipher.GetBlockSize: integer;
-begin
-   Result := -1;
-end;
-
-procedure TBlockCipher.SetIV(const Value);
-begin
-end;
-
-procedure TBlockCipher.GetIV(var Value);
-begin
-end;
-
-procedure TBlockCipher.Encrypt(const Indata; var Outdata; Size: longword);
-begin
-   case fCipherMode of
-      cmCBC:
-         EncryptCBC(Indata, Outdata, Size);
-      cmCFB8bit:
-         EncryptCFB8bit(Indata, Outdata, Size);
-      cmCFBblock:
-         EncryptCFBblock(Indata, Outdata, Size);
-      cmOFB:
-         EncryptOFB(Indata, Outdata, Size);
-      cmCTR:
-         EncryptCTR(Indata, Outdata, Size);
-   end;
-end;
-
-procedure TBlockCipher.Decrypt(const Indata; var Outdata; Size: longword);
-begin
-   case fCipherMode of
-      cmCBC:
-         DecryptCBC(Indata, Outdata, Size);
-      cmCFB8bit:
-         DecryptCFB8bit(Indata, Outdata, Size);
-      cmCFBblock:
-         DecryptCFBblock(Indata, Outdata, Size);
-      cmOFB:
-         DecryptOFB(Indata, Outdata, Size);
-      cmCTR:
-         DecryptCTR(Indata, Outdata, Size);
-   end;
-end;
-
-procedure TBlockCipher.EncryptECB(const Indata; var Outdata);
-begin
-end;
-
-procedure TBlockCipher.DecryptECB(const Indata; var Outdata);
-begin
-end;
-
-procedure TBlockCipher.EncryptCBC(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.DecryptCBC(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.EncryptCFB8bit(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.DecryptCFB8bit(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.EncryptCFBblock(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.DecryptCFBblock(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.EncryptOFB(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.DecryptOFB(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.EncryptCTR(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-procedure TBlockCipher.DecryptCTR(const Indata; var Outdata;
-  Size: longword);
-begin
-end;
-
-constructor TBlockCipher.Create(AOwner: TComponent);
-begin
-   inherited Create(AOwner);
-   fCipherMode := cmCBC;
-end;
-
-{ TBlockCipher64 }
-
-procedure TBlockCipher64.IncCounter;
-var
-  i: integer;
-begin
-  Inc(CV[7]);
-  i:= 7;
-  while (i> 0) and (CV[i] = 0) do
-  begin
-    Inc(CV[i-1]);
-    Dec(i);
-  end;
-end;
-
-class function TBlockCipher64.GetBlockSize: integer;
-begin
-  Result:= 64;
-end;
-
-procedure TBlockCipher64.Init(const Key; Size: longword; InitVector: pointer);
-begin
-  inherited Init(Key,Size,InitVector);
-  InitKey(Key,Size);
-  if InitVector= nil then
-  begin
-    FillChar(IV,8,{$IFDEF DCP1COMPAT}$FF{$ELSE}0{$ENDIF});
-    EncryptECB(IV,IV);
-    Reset;
-  end
-  else
-  begin
-    Move(InitVector^,IV,8);
-    Reset;
-  end;
-end;
-
-procedure TBlockCipher64.SetIV(const Value);
-begin
-  CheckInitialized;
-  Move(Value,IV,8);
-  Reset;
-end;
-
-procedure TBlockCipher64.GetIV(var Value);
-begin
-  CheckInitialized;
-  Move(CV,Value,8);
-end;
-
-procedure TBlockCipher64.Reset;
-begin
-  CheckInitialized;
-  Move(IV,CV,8);
-end;
-
-procedure TBlockCipher64.Burn;
-begin
-  FillChar(IV,8,$FF);
-  FillChar(CV,8,$FF);
-  inherited Burn;
-end;
-
-procedure XorBlock(var InData1, InData2; Size: longword);
-var
-   b1: PByteArray;
-   b2: PByteArray;
-   i: longword;
-begin
-   b1 := @InData1;
-   b2 := @InData2;
-   for i := 0 to Size - 1 do
-      b1[i] := b1[i] xor b2[i];
-end;
-
-procedure TBlockCipher64.EncryptCBC(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 8) do
-  begin
-    Move(p1^,p2^,8);
-    XorBlock(p2^,CV,8);
-    EncryptECB(p2^,p2^);
-    Move(p2^,CV,8);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
-  end;
-  if (Size mod 8)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 8);
-    XorBlock(p2^,CV,Size mod 8);
-  end;
-end;
-
-procedure TBlockCipher64.DecryptCBC(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-  Temp: array[0..7] of byte;
-begin
-  CheckInitialized;
-  FillChar(Temp, SizeOf(Temp), 0);
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 8) do
-  begin
-    Move(p1^,p2^,8);
-    Move(p1^,Temp,8);
-    DecryptECB(p2^,p2^);
-    XorBlock(p2^,CV,8);
-    Move(Temp,CV,8);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
-  end;
-  if (Size mod 8)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 8);
-    XorBlock(p2^,CV,Size mod 8);
-  end;
-end;
-
-procedure TBlockCipher64.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: Pbyte;
-  Temp: array[0..7] of byte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to Size do
-  begin
-    EncryptECB(CV,Temp);
-    p2^:= p1^ xor Temp[0];
-    Move(CV[1],CV[0],8-1);
-    CV[7]:= p2^;
-    Inc(p1);
-    Inc(p2);
-  end;
-end;
-
-procedure TBlockCipher64.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: Pbyte;
-  TempByte: byte;
-  Temp: array[0..7] of byte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to Size do
-  begin
-    TempByte:= p1^;
-    EncryptECB(CV,Temp);
-    p2^:= p1^ xor Temp[0];
-    Move(CV[1],CV[0],8-1);
-    CV[7]:= TempByte;
-    Inc(p1);
-    Inc(p2);
-  end;
-end;
-
-procedure TBlockCipher64.EncryptCFBblock(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 8) do
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,8);
-    XorBlock(p2^,CV,8);
-    Move(p2^,CV,8);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
-  end;
-  if (Size mod 8)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 8);
-    XorBlock(p2^,CV,Size mod 8);
-  end;
-end;
-
-procedure TBlockCipher64.DecryptCFBblock(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-  Temp: array[0..7] of byte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 8) do
-  begin
-    Move(p1^,Temp,8);
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,8);
-    XorBlock(p2^,CV,8);
-    Move(Temp,CV,8);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
-  end;
-  if (Size mod 8)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 8);
-    XorBlock(p2^,CV,Size mod 8);
-  end;
-end;
-
-procedure TBlockCipher64.EncryptOFB(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 8) do
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,8);
-    XorBlock(p2^,CV,8);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
-  end;
-  if (Size mod 8)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 8);
-    XorBlock(p2^,CV,Size mod 8);
-  end;
-end;
-
-procedure TBlockCipher64.DecryptOFB(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 8) do
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,8);
-    XorBlock(p2^,CV,8);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
-  end;
-  if (Size mod 8)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 8);
-    XorBlock(p2^,CV,Size mod 8);
-  end;
-end;
-
-procedure TBlockCipher64.EncryptCTR(const Indata; var Outdata; Size: longword);
-var
-  temp: array[0..7] of byte;
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 8) do
-  begin
-    EncryptECB(CV,temp);
-    IncCounter;
-    Move(p1^,p2^,8);
-    XorBlock(p2^,temp,8);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
-  end;
-  if (Size mod 8)<> 0 then
-  begin
-    EncryptECB(CV,temp);
-    IncCounter;
-    Move(p1^,p2^,Size mod 8);
-    XorBlock(p2^,temp,Size mod 8);
-  end;
-end;
-
-procedure TBlockCipher64.DecryptCTR(const Indata; var Outdata; Size: longword);
-var
-  temp: array[0..7] of byte;
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 8) do
-  begin
-    EncryptECB(CV,temp);
-    IncCounter;
-    Move(p1^,p2^,8);
-    XorBlock(p2^,temp,8);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 8; {$ELSE} Inc(p1, 8); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 8; {$ELSE} Inc(p2, 8); {$ENDIF}
-  end;
-  if (Size mod 8)<> 0 then
-  begin
-    EncryptECB(CV,temp);
-    IncCounter;
-    Move(p1^,p2^,Size mod 8);
-    XorBlock(p2^,temp,Size mod 8);
-  end;
-end;
-
-{ TBlockCipher128 }
-
-procedure TBlockCipher128.IncCounter;
-var
-  i: integer;
-begin
-  Inc(CV[15]);
-  i:= 15;
-  while (i> 0) and (CV[i] = 0) do
-  begin
-    Inc(CV[i-1]);
-    Dec(i);
-  end;
-end;
-
-class function TBlockCipher128.GetBlockSize: integer;
-begin
-  Result:= 128;
-end;
-
-procedure TBlockCipher128.Init(const Key; Size: longword; InitVector: pointer);
-begin
-  inherited Init(Key,Size,InitVector);
-  InitKey(Key,Size);
-  if InitVector= nil then
-  begin
-    FillChar(IV,16,{$IFDEF DCP1COMPAT}$FF{$ELSE}0{$ENDIF});
-    EncryptECB(IV,IV);
-    Reset;
-  end
-  else
-  begin
-    Move(InitVector^,IV,16);
-    Reset;
-  end;
-end;
-
-procedure TBlockCipher128.SetIV(const Value);
-begin
-  CheckInitialized;
-  Move(Value,IV,16);
-  Reset;
-end;
-
-procedure TBlockCipher128.GetIV(var Value);
-begin
-  CheckInitialized;
-  Move(CV,Value,16);
-end;
-
-procedure TBlockCipher128.Reset;
-begin
-  CheckInitialized;
-  Move(IV,CV,16);
-end;
-
-procedure TBlockCipher128.Burn;
-begin
-  FillChar(IV,16,$FF);
-  FillChar(CV,16,$FF);
-  inherited Burn;
-end;
-
-procedure TBlockCipher128.EncryptCBC(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 16) do
-  begin
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    EncryptECB(p2^,p2^);
-    Move(p2^,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
-  end;
-end;
-
-procedure TBlockCipher128.DecryptCBC(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-  Temp: array[0..15] of byte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 16) do
-  begin
-    Move(p1^,p2^,16);
-    Move(p1^,Temp,16);
-    DecryptECB(p2^,p2^);
-    XorBlock(p2^,CV,16);
-    Move(Temp,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
-  end;
-end;
-
-procedure TBlockCipher128.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: Pbyte;
-  Temp: array[0..15] of byte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to Size do
-  begin
-    EncryptECB(CV,Temp);
-    p2^:= p1^ xor Temp[0];
-    Move(CV[1],CV[0],15);
-    CV[15]:= p2^;
-    Inc(p1);
-    Inc(p2);
-  end;
-end;
-
-procedure TBlockCipher128.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: Pbyte;
-  TempByte: byte;
-  Temp: array[0..15] of byte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to Size do
-  begin
-    TempByte:= p1^;
-    EncryptECB(CV,Temp);
-    p2^:= p1^ xor Temp[0];
-    Move(CV[1],CV[0],15);
-    CV[15]:= TempByte;
-    Inc(p1);
-    Inc(p2);
-  end;
-end;
-
-procedure TBlockCipher128.EncryptCFBblock(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 16) do
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    Move(p2^,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
-  end;
-end;
-
-procedure TBlockCipher128.DecryptCFBblock(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-  Temp: array[0..15] of byte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 16) do
-  begin
-    Move(p1^,Temp,16);
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    Move(Temp,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
-  end;
-end;
-
-procedure TBlockCipher128.EncryptOFB(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 16) do
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
-  end;
-end;
-
-procedure TBlockCipher128.DecryptOFB(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 16) do
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
-  end;
-end;
-
-procedure TBlockCipher128.EncryptCTR(const Indata; var Outdata; Size: longword);
-var
-  temp: array[0..15] of byte;
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 16) do
-  begin
-    EncryptECB(CV,temp);
-    IncCounter;
-    Move(p1^,p2^,16);
-    XorBlock(p2^,temp,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,temp);
-    IncCounter;
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,temp,Size mod 16);
-  end;
-end;
-
-procedure TBlockCipher128.DecryptCTR(const Indata; var Outdata; Size: longword);
-var
-  temp: array[0..15] of byte;
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 16) do
-  begin
-    EncryptECB(CV,temp);
-    IncCounter;
-    Move(p1^,p2^,16);
-    XorBlock(p2^,temp,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,temp);
-    IncCounter;
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,temp,Size mod 16);
-  end;
 end;
 
 end.
