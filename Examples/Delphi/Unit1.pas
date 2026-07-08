@@ -31,9 +31,9 @@ procedure TForm1.BtnEncryptClick(Sender: TObject);
 var
   OriginalText, Key, IV, EncryptedText: TBytes;
 begin
-  OriginalText := TEncoding.ANSI.GetBytes('This is the original text');
-  Key := TEncoding.ANSI.GetBytes('Key1234567890-1234567890-1234567'); // 256 bits-32 bytes
-  IV := TEncoding.ANSI.GetBytes('1234567890123456'); // 16 bytes
+  OriginalText := TEncoding.UTF8.GetBytes('This is the original text');
+  Key := TEncoding.UTF8.GetBytes('Key1234567890-1234567890-1234567'); // 256 bits-32 bytes
+  IV := TEncoding.UTF8.GetBytes('1234567890123456'); // 16 bytes
 
   EncryptedText := TAES.Encrypt(OriginalText, Key, 256, IV, cmCBC, pmPKCS7);
   Memo1.Text := TNetEncoding.Base64.EncodeBytesToString(EncryptedText);
