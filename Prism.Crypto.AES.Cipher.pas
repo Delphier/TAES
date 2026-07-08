@@ -11,164 +11,110 @@ uses
   System.Classes, System.SysUtils, System.Types;
 
 type
-  Pdword = ^dword;
-  dword = longword;
-  Pwordarray = ^Twordarray;
-  Twordarray = array [0 .. 19383] of word;
-  Pdwordarray = ^Tdwordarray;
-  Tdwordarray = array [0 .. 8191] of dword;
+  PDWord = ^DWord;
+  DWord = LongWord;
+  PWordArray = ^TWordArray;
+  TWordArray = array[0..19383] of Word;
+  PDWordArray = ^TDWordArray;
+  TDWordArray = array[0 .. 8191]of DWord;
 
-{$IFNDEF DELPHIXE2_UP}
-   NativeInt = {$IFDEF WIN64} int64 {$ELSE} Longint {$ENDIF};
-{$ENDIF}
-   PointerToInt = {$IFDEF DELPHIXE2_UP} Pbyte {$ELSE} NativeInt {$ENDIF};
+  {$IFNDEF DELPHIXE2_UP}
+  NativeInt = {$IFDEF WIN64}Int64{$ELSE}LongInt{$ENDIF};
+  {$ENDIF}
+  PointerToInt = {$IFDEF DELPHIXE2_UP}PByte{$ELSE}NativeInt{$ENDIF};
 
-type
-   ECipher = class(Exception);
+  ECipher = class(Exception);
 
-   TCipher = class
-   protected
-      FInitialized: Boolean; { Whether or not the key setup has been done yet }
-   private
-      function _GetMaxKeySize: integer;
-   public
-      constructor Create;
-      destructor Destroy; override;
-      property MaxKeySize: integer read _GetMaxKeySize;
-      property Initialized: boolean read fInitialized;
-      class function GetMaxKeySize: integer; virtual;
-      { Get the maximum key size (in bits) }
-      procedure Init(const Key; Size: longword; InitVector: pointer); virtual;
-      { Do key setup based on the data in Key, size is in bits }
-      procedure Burn; virtual;
-      { Clear all stored key information }
-      procedure Reset; virtual;
-      { Reset any stored chaining information }
-      procedure Encrypt(const Indata; var Outdata; Size: longword); virtual;
-      { Encrypt size bytes of data and place in Outdata }
-      procedure Decrypt(const Indata; var Outdata; Size: longword); virtual;
-      { Decrypt size bytes of data and place in Outdata }
-      function EncryptStream(InStream, OutStream: TStream; Size: longword)
-        : longword;
-      { Encrypt size bytes of data from InStream and place in OutStream }
-      function DecryptStream(InStream, OutStream: TStream; Size: longword)
-        : longword;
-      { Decrypt size bytes of data from InStream and place in OutStream }
-      function PartialEncryptStream(AStream: TMemoryStream; Size: longword)
-        : longword;
-      { Partially Encrypt up to 16K bytes of data in AStream }
-      function PartialDecryptStream(AStream: TMemoryStream; Size: longword)
-        : longword;
-      { Partially Decrypt up to 16K bytes of data in AStream }
-   end;
+  TCipher = class
+  protected
+    FInitialized: Boolean; { Whether or not the key setup has been done yet }
+  private
+    function _GetMaxKeySize: Integer;
+  public
+    constructor Create;
+    destructor Destroy; override;
+    property MaxKeySize: Integer read _GetMaxKeySize;
+    property Initialized: Boolean read FInitialized;
+    class function GetMaxKeySize: Integer; virtual; { Get the maximum key size (in bits) }
+    procedure Init(const Key; Size: LongWord; InitVector: Pointer); virtual; { Do key setup based on the data in Key, size is in bits }
+    procedure Burn; virtual; { Clear all stored key information }
+    procedure Reset; virtual; { Reset any stored chaining information }
+    procedure Encrypt(const Indata; var Outdata; Size: LongWord); virtual; { Encrypt size bytes of data and place in Outdata }
+    procedure Decrypt(const Indata; var Outdata; Size: LongWord); virtual; { Decrypt size bytes of data and place in Outdata }
+    function EncryptStream(InStream, OutStream: TStream; Size: LongWord): LongWord; { Encrypt size bytes of data from InStream and place in OutStream }
+    function DecryptStream(InStream, OutStream: TStream; Size: LongWord): LongWord; { Decrypt size bytes of data from InStream and place in OutStream }
+    function PartialEncryptStream(AStream: TMemoryStream; Size: LongWord): LongWord; { Partially Encrypt up to 16K bytes of data in AStream }
+    function PartialDecryptStream(AStream: TMemoryStream; Size: LongWord): LongWord; { Partially Decrypt up to 16K bytes of data in AStream }
+  end;
 
-   TCipherClass = class of TCipher;
+  TCipherClass = class of TCipher;
 
-   TCipherMode = (cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR);
-   // cmCFB8bit is equal to DCPcrypt v1.xx's CFB mode
-   EBlockCipher = class(ECipher);
+  TCipherMode = (cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR);
 
-   TBlockCipher = class(TCipher)
-   protected
-      FCipherMode: TCipherMode;
-      procedure CheckInitialized;
-      procedure InitKey(const Key; Size: longword); virtual;
-   private
-      function _GetBlockSize: integer;
-   public
-      constructor Create;
-      property BlockSize: integer read _GetBlockSize;
-      property CipherMode: TCipherMode read FCipherMode write FCipherMode;
-      class function GetBlockSize: integer; virtual;
-      { Get the block size of the cipher (in bits) }
+  EBlockCipher = class(ECipher);
 
-      procedure SetIV(const Value); virtual;
-      { Sets the IV to Value and performs a reset }
-      procedure GetIV(var Value); virtual;
-      { Returns the current chaining information, not the actual IV }
-
-      procedure Encrypt(const Indata; var Outdata; Size: longword); override;
-      { Encrypt size bytes of data and place in Outdata using CipherMode }
-      procedure Decrypt(const Indata; var Outdata; Size: longword); override;
-      { Decrypt size bytes of data and place in Outdata using CipherMode }
-      procedure EncryptECB(const Indata; var Outdata); virtual;
-      { Encrypt a block of data using the ECB method of encryption }
-      procedure DecryptECB(const Indata; var Outdata); virtual;
-      { Decrypt a block of data using the ECB method of decryption }
-      procedure EncryptCBC(const Indata; var Outdata; Size: longword); virtual;
-      { Encrypt size bytes of data using the CBC method of encryption }
-      procedure DecryptCBC(const Indata; var Outdata; Size: longword); virtual;
-      { Decrypt size bytes of data using the CBC method of decryption }
-      procedure EncryptCFB8bit(const Indata; var Outdata;
-        Size: longword); virtual;
-      { Encrypt size bytes of data using the CFB (8 bit) method of encryption }
-      procedure DecryptCFB8bit(const Indata; var Outdata;
-        Size: longword); virtual;
-      { Decrypt size bytes of data using the CFB (8 bit) method of decryption }
-      procedure EncryptCFBblock(const Indata; var Outdata;
-        Size: longword); virtual;
-      { Encrypt size bytes of data using the CFB (block) method of encryption }
-      procedure DecryptCFBblock(const Indata; var Outdata;
-        Size: longword); virtual;
-      { Decrypt size bytes of data using the CFB (block) method of decryption }
-      procedure EncryptOFB(const Indata; var Outdata; Size: longword); virtual;
-      { Encrypt size bytes of data using the OFB method of encryption }
-      procedure DecryptOFB(const Indata; var Outdata; Size: longword); virtual;
-      { Decrypt size bytes of data using the OFB method of decryption }
-      procedure EncryptCTR(const Indata; var Outdata; Size: longword); virtual;
-      { Encrypt size bytes of data using the CTR method of encryption }
-      procedure DecryptCTR(const Indata; var Outdata; Size: longword); virtual;
-      { Decrypt size bytes of data using the CTR method of decryption }
-   end;
+  TBlockCipher = class(TCipher)
+  protected
+    FCipherMode: TCipherMode;
+    procedure CheckInitialized;
+    procedure InitKey(const Key; Size: LongWord); virtual;
+  private
+    function _GetBlockSize: Integer;
+  public
+    constructor Create;
+    property BlockSize: Integer read _GetBlockSize;
+    property CipherMode: TCipherMode read FCipherMode write FCipherMode;
+    class function GetBlockSize: Integer; virtual; { Get the block size of the cipher (in bits) }
+    procedure SetIV(const Value); virtual; { Sets the IV to Value and performs a reset }
+    procedure GetIV(var Value); virtual; { Returns the current chaining information, not the actual IV }
+    procedure Encrypt(const Indata; var Outdata; Size: LongWord); override; { Encrypt size bytes of data and place in Outdata using CipherMode }
+    procedure Decrypt(const Indata; var Outdata; Size: LongWord); override; { Decrypt size bytes of data and place in Outdata using CipherMode }
+    procedure EncryptECB(const Indata; var Outdata); virtual;
+    procedure DecryptECB(const Indata; var Outdata); virtual;
+    procedure EncryptCBC(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure DecryptCBC(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure EncryptCFB8bit(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure DecryptCFB8bit(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure EncryptCFBblock(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure DecryptCFBblock(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure EncryptOFB(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure DecryptOFB(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure EncryptCTR(const Indata; var Outdata; Size: LongWord); virtual;
+    procedure DecryptCTR(const Indata; var Outdata; Size: LongWord); virtual;
+  end;
 
   TBlockCipherClass = class of TBlockCipher;
 
   TBlockCipher128 = class(TBlockCipher)
   private
-    IV, CV: array[0..15] of byte;
+    IV, CV: array[0..15] of Byte;
     procedure IncCounter;
   public
-    class function GetBlockSize: integer; override;
-      { Get the block size of the cipher (in bits) }
-    procedure Reset; override;
-      { Reset any stored chaining information }
-    procedure Burn; override;
-      { Clear all stored key information and chaining information }
-    procedure SetIV(const Value); override;
-      { Sets the IV to Value and performs a reset }
-    procedure GetIV(var Value); override;
-      { Returns the current chaining information, not the actual IV }
-    procedure Init(const Key; Size: longword; InitVector: pointer); override;
-      { Do key setup based on the data in Key, size is in bits }
-    procedure EncryptCBC(const Indata; var Outdata; Size: longword); override;
-      { Encrypt size bytes of data using the CBC method of encryption }
-    procedure DecryptCBC(const Indata; var Outdata; Size: longword); override;
-      { Decrypt size bytes of data using the CBC method of decryption }
-    procedure EncryptCFB8bit(const Indata; var Outdata; Size: longword); override;
-      { Encrypt size bytes of data using the CFB (8 bit) method of encryption }
-    procedure DecryptCFB8bit(const Indata; var Outdata; Size: longword); override;
-      { Decrypt size bytes of data using the CFB (8 bit) method of decryption }
-    procedure EncryptCFBblock(const Indata; var Outdata; Size: longword); override;
-      { Encrypt size bytes of data using the CFB (block) method of encryption }
-    procedure DecryptCFBblock(const Indata; var Outdata; Size: longword); override;
-      { Decrypt size bytes of data using the CFB (block) method of decryption }
-    procedure EncryptOFB(const Indata; var Outdata; Size: longword); override;
-      { Encrypt size bytes of data using the OFB method of encryption }
-    procedure DecryptOFB(const Indata; var Outdata; Size: longword); override;
-      { Decrypt size bytes of data using the OFB method of decryption }
-    procedure EncryptCTR(const Indata; var Outdata; Size: longword); override;
-      { Encrypt size bytes of data using the CTR method of encryption }
-    procedure DecryptCTR(const Indata; var Outdata; Size: longword); override;
-      { Decrypt size bytes of data using the CTR method of decryption }
+    class function GetBlockSize: Integer; override; { Get the block size of the cipher (in bits) }
+    procedure Reset; override; { Reset any stored chaining information }
+    procedure Burn; override; { Clear all stored key information and chaining information }
+    procedure SetIV(const Value); override; { Sets the IV to Value and performs a reset }
+    procedure GetIV(var Value); override; { Returns the current chaining information, not the actual IV }
+    procedure Init(const Key; Size: LongWord; InitVector: Pointer); override; { Do key setup based on the data in Key, size is in bits }
+    procedure EncryptCBC(const Indata; var Outdata; Size: LongWord); override;
+    procedure DecryptCBC(const Indata; var Outdata; Size: LongWord); override;
+    procedure EncryptCFB8bit(const Indata; var Outdata; Size: LongWord); override;
+    procedure DecryptCFB8bit(const Indata; var Outdata; Size: LongWord); override;
+    procedure EncryptCFBblock(const Indata; var Outdata; Size: LongWord); override;
+    procedure DecryptCFBblock(const Indata; var Outdata; Size: LongWord); override;
+    procedure EncryptOFB(const Indata; var Outdata; Size: LongWord); override;
+    procedure DecryptOFB(const Indata; var Outdata; Size: LongWord); override;
+    procedure EncryptCTR(const Indata; var Outdata; Size: LongWord); override;
+    procedure DecryptCTR(const Indata; var Outdata; Size: LongWord); override;
   end;
 
   TAESCipher = class(TBlockCipher128)
   protected
-    numrounds: longword;
-    rk, drk: array[0..14,0..7] of DWord;
-    procedure InitKey(const Key; Size: longword); override;
+    numrounds: LongWord;
+    rk, drk: array[0..14, 0..7] of DWord;
+    procedure InitKey(const Key; Size: LongWord); override;
   public
-    class function GetMaxKeySize: integer; override;
+    class function GetMaxKeySize: Integer; override;
     procedure Burn; override;
     procedure EncryptECB(const InData; var OutData); override;
     procedure DecryptECB(const InData; var OutData); override;
@@ -182,52 +128,52 @@ implementation
 
 constructor TCipher.Create;
 begin
-   inherited;
-   Burn;
+  inherited;
+  Burn;
 end;
 
 destructor TCipher.Destroy;
 begin
-   if fInitialized then
-      Burn;
-   inherited Destroy;
+  if FInitialized then
+    Burn;
+  inherited Destroy;
 end;
 
-function TCipher._GetMaxKeySize: integer;
+function TCipher._GetMaxKeySize: Integer;
 begin
-   Result := GetMaxKeySize;
+  Result := GetMaxKeySize;
 end;
 
-class function TCipher.GetMaxKeySize: integer;
+class function TCipher.GetMaxKeySize: Integer;
 begin
-   Result := -1;
+  Result := -1;
 end;
 
-procedure TCipher.Init(const Key; Size: longword; InitVector: pointer);
+procedure TCipher.Init(const Key; Size: LongWord; InitVector: Pointer);
 begin
-   if fInitialized then
-      Burn;
-   if (Size <= 0) or ((Size and 3) <> 0) or (Size > longword(GetMaxKeySize))
-   then
-      raise ECipher.Create('Invalid key size')
-   else
-      fInitialized := true;
+  if FInitialized then
+    Burn;
+  if (Size <= 0) or ((Size and 3) <> 0) or (Size > LongWord(GetMaxKeySize))
+  then
+    raise ECipher.Create('Invalid key size')
+  else
+    FInitialized := True;
 end;
 
 procedure TCipher.Burn;
 begin
-   fInitialized := false;
+  FInitialized := False;
 end;
 
 procedure TCipher.Reset;
 begin
 end;
 
-procedure TCipher.Encrypt(const Indata; var Outdata; Size: longword);
+procedure TCipher.Encrypt(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TCipher.Decrypt(const Indata; var Outdata; Size: longword);
+procedure TCipher.Decrypt(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
@@ -235,107 +181,103 @@ const
    EncryptBufSize = 1024 * 1024 * 8; // 8 Megs
    EncryptLimit = (16 * 1024); // 16K operation size
 
-function TCipher.EncryptStream(InStream, OutStream: TStream; Size: longword)
-  : longword;
+function TCipher.EncryptStream(InStream, OutStream: TStream; Size: LongWord): LongWord;
 var
-   Buffer: TByteDynArray;
-   i, read: longword;
-   Range: longword;
-   Remainder: longword;
+  Buffer: TByteDynArray;
+  i, read: LongWord;
+  Range: LongWord;
+  Remainder: LongWord;
 begin
-   Result := 0;
+  Result := 0;
 
-   if Size < EncryptBufSize then
-      SetLength(Buffer, Size)
-   else
-      SetLength(Buffer, EncryptBufSize);
+  if Size < EncryptBufSize then
+    SetLength(Buffer, Size)
+  else
+    SetLength(Buffer, EncryptBufSize);
 
-   Range := Size div longword(Length(Buffer));
-   for i := 1 to Range do
-   begin
-      Read := InStream.read(Buffer[0], Length(Buffer));
-      Inc(Result, Read);
-      Encrypt(Buffer[0], Buffer[0], Read);
-      OutStream.Write(Buffer[0], Read);
-   end;
+  Range := Size div LongWord(Length(Buffer));
+  for i := 1 to Range do
+  begin
+    Read := InStream.read(Buffer[0], Length(Buffer));
+    Inc(Result, Read);
+    Encrypt(Buffer[0], Buffer[0], Read);
+    OutStream.Write(Buffer[0], Read);
+  end;
 
-   Remainder := Size mod longword(Length(Buffer));
-   if Remainder <> 0 then
-   begin
-      Read := InStream.read(Buffer[0], Remainder);
-      Inc(Result, Read);
-      Encrypt(Buffer[0], Buffer[0], Read);
-      OutStream.Write(Buffer[0], Read);
-   end;
+  Remainder := Size mod LongWord(Length(Buffer));
+  if Remainder <> 0 then
+  begin
+    Read := InStream.read(Buffer[0], Remainder);
+    Inc(Result, Read);
+    Encrypt(Buffer[0], Buffer[0], Read);
+    OutStream.Write(Buffer[0], Read);
+  end;
 end;
 
-function TCipher.DecryptStream(InStream, OutStream: TStream; Size: longword)
-  : longword;
+function TCipher.DecryptStream(InStream, OutStream: TStream; Size: LongWord): LongWord;
 var
-   Buffer: TByteDynArray;
-   i, read: longword;
-   Range: longword;
-   Remainder: longword;
+  Buffer: TByteDynArray;
+  i, read: LongWord;
+  Range: LongWord;
+  Remainder: LongWord;
 begin
-   Result := 0;
-   if Size < EncryptBufSize then
-      SetLength(Buffer, Size)
-   else
-      SetLength(Buffer, EncryptBufSize);
+  Result := 0;
+  if Size < EncryptBufSize then
+    SetLength(Buffer, Size)
+  else
+    SetLength(Buffer, EncryptBufSize);
 
-   Range := Size div longword(Length(Buffer));
-   for i := 1 to Range do
-   begin
-      Read := InStream.read(Buffer[0], Length(Buffer));
-      Inc(Result, Read);
-      Decrypt(Buffer[0], Buffer[0], Read);
-      OutStream.Write(Buffer[0], Read);
-   end;
+  Range := Size div LongWord(Length(Buffer));
+  for i := 1 to Range do
+  begin
+    Read := InStream.read(Buffer[0], Length(Buffer));
+    Inc(Result, Read);
+    Decrypt(Buffer[0], Buffer[0], Read);
+    OutStream.Write(Buffer[0], Read);
+  end;
 
-   Remainder := Size mod longword(Length(Buffer));
-   if Remainder <> 0 then
-   begin
-      Read := InStream.read(Buffer[0], Remainder);
-      Inc(Result, Read);
-      Decrypt(Buffer[0], Buffer[0], Read);
-      OutStream.Write(Buffer[0], Read);
-   end;
+  Remainder := Size mod LongWord(Length(Buffer));
+  if Remainder <> 0 then
+  begin
+    Read := InStream.read(Buffer[0], Remainder);
+    Inc(Result, Read);
+    Decrypt(Buffer[0], Buffer[0], Read);
+    OutStream.Write(Buffer[0], Read);
+  end;
 end;
 
-function TCipher.PartialEncryptStream(AStream: TMemoryStream;
-  Size: longword): longword;
+function TCipher.PartialEncryptStream(AStream: TMemoryStream; Size: LongWord): LongWord;
 var
-   Buffer: PLongInt;
+  Buffer: PLongInt;
 begin
-   if Size > EncryptLimit then
-      Size := EncryptLimit;
+  if Size > EncryptLimit then
+    Size := EncryptLimit;
 
-   Result := Size;
-   Buffer := PLongInt(AStream.Memory);
-   // only process the limited size:
-   Encrypt(Buffer^, Buffer^, Size);
+  Result := Size;
+  Buffer := PLongInt(AStream.Memory);
+  // only process the limited size:
+  Encrypt(Buffer^, Buffer^, Size);
 end;
 
-function TCipher.PartialDecryptStream(AStream: TMemoryStream;
-  Size: longword): longword;
+function TCipher.PartialDecryptStream(AStream: TMemoryStream; Size: LongWord): LongWord;
 var
-   Buffer: PLongInt;
+  Buffer: PLongInt;
 begin
-   if Size > EncryptLimit then
-      Size := EncryptLimit;
+  if Size > EncryptLimit then
+    Size := EncryptLimit;
 
-   Result := Size;
-   Buffer := PLongInt(AStream.Memory);
-   // only process the limited size:
-   Decrypt(Buffer^, Buffer^, Size);
+  Result := Size;
+  Buffer := PLongInt(AStream.Memory);
+  // only process the limited size:
+  Decrypt(Buffer^, Buffer^, Size);
 end;
 
 { TBlockCipher }
 
 constructor TBlockCipher.Create;
 begin
-   inherited;
-   fCipherMode := cmCBC;
+  inherited;
+  FCipherMode := cmCBC;
 end;
 
 procedure TBlockCipher.CheckInitialized;
@@ -344,18 +286,18 @@ begin
     raise EBlockCipher.Create('Cipher not initialized');
 end;
 
-procedure TBlockCipher.InitKey(const Key; Size: longword);
+procedure TBlockCipher.InitKey(const Key; Size: LongWord);
 begin
 end;
 
-function TBlockCipher._GetBlockSize: integer;
+function TBlockCipher._GetBlockSize: Integer;
 begin
-   Result := GetBlockSize;
+  Result := GetBlockSize;
 end;
 
-class function TBlockCipher.GetBlockSize: integer;
+class function TBlockCipher.GetBlockSize: Integer;
 begin
-   Result := -1;
+  Result := -1;
 end;
 
 procedure TBlockCipher.SetIV(const Value);
@@ -366,36 +308,36 @@ procedure TBlockCipher.GetIV(var Value);
 begin
 end;
 
-procedure TBlockCipher.Encrypt(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher.Encrypt(const Indata; var Outdata; Size: LongWord);
 begin
-   case fCipherMode of
-      cmCBC:
-         EncryptCBC(Indata, Outdata, Size);
-      cmCFB8bit:
-         EncryptCFB8bit(Indata, Outdata, Size);
-      cmCFBblock:
-         EncryptCFBblock(Indata, Outdata, Size);
-      cmOFB:
-         EncryptOFB(Indata, Outdata, Size);
-      cmCTR:
-         EncryptCTR(Indata, Outdata, Size);
-   end;
+  case FCipherMode of
+    cmCBC:
+       EncryptCBC(Indata, Outdata, Size);
+    cmCFB8bit:
+       EncryptCFB8bit(Indata, Outdata, Size);
+    cmCFBblock:
+       EncryptCFBblock(Indata, Outdata, Size);
+    cmOFB:
+       EncryptOFB(Indata, Outdata, Size);
+    cmCTR:
+       EncryptCTR(Indata, Outdata, Size);
+  end;
 end;
 
-procedure TBlockCipher.Decrypt(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher.Decrypt(const Indata; var Outdata; Size: LongWord);
 begin
-   case fCipherMode of
-      cmCBC:
-         DecryptCBC(Indata, Outdata, Size);
-      cmCFB8bit:
-         DecryptCFB8bit(Indata, Outdata, Size);
-      cmCFBblock:
-         DecryptCFBblock(Indata, Outdata, Size);
-      cmOFB:
-         DecryptOFB(Indata, Outdata, Size);
-      cmCTR:
-         DecryptCTR(Indata, Outdata, Size);
-   end;
+  case FCipherMode of
+    cmCBC:
+       DecryptCBC(Indata, Outdata, Size);
+    cmCFB8bit:
+       DecryptCFB8bit(Indata, Outdata, Size);
+    cmCFBblock:
+       DecryptCFBblock(Indata, Outdata, Size);
+    cmOFB:
+       DecryptOFB(Indata, Outdata, Size);
+    cmCTR:
+       DecryptCTR(Indata, Outdata, Size);
+  end;
 end;
 
 procedure TBlockCipher.EncryptECB(const Indata; var Outdata);
@@ -406,53 +348,43 @@ procedure TBlockCipher.DecryptECB(const Indata; var Outdata);
 begin
 end;
 
-procedure TBlockCipher.EncryptCBC(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.EncryptCBC(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.DecryptCBC(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.DecryptCBC(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.EncryptCFB8bit(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.EncryptCFB8bit(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.DecryptCFB8bit(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.DecryptCFB8bit(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.EncryptCFBblock(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.EncryptCFBblock(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.DecryptCFBblock(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.DecryptCFBblock(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.EncryptOFB(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.EncryptOFB(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.DecryptOFB(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.DecryptOFB(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.EncryptCTR(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.EncryptCTR(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
-procedure TBlockCipher.DecryptCTR(const Indata; var Outdata;
-  Size: longword);
+procedure TBlockCipher.DecryptCTR(const Indata; var Outdata; Size: LongWord);
 begin
 end;
 
@@ -460,35 +392,35 @@ end;
 
 procedure TBlockCipher128.IncCounter;
 var
-  i: integer;
+  i: Integer;
 begin
   Inc(CV[15]);
-  i:= 15;
-  while (i> 0) and (CV[i] = 0) do
+  i := 15;
+  while (i > 0) and (CV[i] = 0) do
   begin
     Inc(CV[i-1]);
     Dec(i);
   end;
 end;
 
-class function TBlockCipher128.GetBlockSize: integer;
+class function TBlockCipher128.GetBlockSize: Integer;
 begin
-  Result:= 128;
+  Result := 128;
 end;
 
-procedure TBlockCipher128.Init(const Key; Size: longword; InitVector: pointer);
+procedure TBlockCipher128.Init(const Key; Size: LongWord; InitVector: Pointer);
 begin
-  inherited Init(Key,Size,InitVector);
-  InitKey(Key,Size);
-  if InitVector= nil then
+  inherited Init(Key, Size, InitVector);
+  InitKey(Key, Size);
+  if InitVector = nil then
   begin
-    FillChar(IV,16,{$IFDEF DCP1COMPAT}$FF{$ELSE}0{$ENDIF});
-    EncryptECB(IV,IV);
+    FillChar(IV, 16, {$IFDEF DCP1COMPAT}$FF{$ELSE}0{$ENDIF});
+    EncryptECB(IV, IV);
     Reset;
   end
   else
   begin
-    Move(InitVector^,IV,16);
+    Move(InitVector^, IV, 16);
     Reset;
   end;
 end;
@@ -496,303 +428,303 @@ end;
 procedure TBlockCipher128.SetIV(const Value);
 begin
   CheckInitialized;
-  Move(Value,IV,16);
+  Move(Value, IV, 16);
   Reset;
 end;
 
 procedure TBlockCipher128.GetIV(var Value);
 begin
   CheckInitialized;
-  Move(CV,Value,16);
+  Move(CV, Value, 16);
 end;
 
 procedure TBlockCipher128.Reset;
 begin
   CheckInitialized;
-  Move(IV,CV,16);
+  Move(IV, CV, 16);
 end;
 
 procedure TBlockCipher128.Burn;
 begin
-  FillChar(IV,16,$FF);
-  FillChar(CV,16,$FF);
+  FillChar(IV, 16, $FF);
+  FillChar(CV, 16, $FF);
   inherited Burn;
 end;
 
-procedure XorBlock(var InData1, InData2; Size: longword);
+procedure XorBlock(var InData1, InData2; Size: LongWord);
 var
-   b1: PByteArray;
-   b2: PByteArray;
-   i: longword;
+  b1: PByteArray;
+  b2: PByteArray;
+  i: LongWord;
 begin
-   b1 := @InData1;
-   b2 := @InData2;
-   for i := 0 to Size - 1 do
-      b1[i] := b1[i] xor b2[i];
+  b1 := @InData1;
+  b2 := @InData2;
+  for i := 0 to Size - 1 do
+    b1[i] := b1[i] xor b2[i];
 end;
 
-procedure TBlockCipher128.EncryptCBC(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptCBC(const Indata; var Outdata; Size: LongWord);
 var
-  i: longword;
+  i: LongWord;
   p1, p2: PByte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 16) do
+  p1 := @Indata;
+  p2 := @Outdata;
+  for i := 1 to (Size div 16) do
   begin
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    EncryptECB(p2^,p2^);
-    Move(p2^,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+    Move(p1^, p2^, 16);
+    XorBlock(p2^, CV, 16);
+    EncryptECB(p2^, p2^);
+    Move(p2^, CV, 16);
+    {$IFDEF DELPHIXE2_UP} p1 := PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2 := PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
   end;
-  if (Size mod 16)<> 0 then
+  if (Size mod 16) <> 0 then
   begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, Size mod 16);
+    XorBlock(p2^, CV, Size mod 16);
   end;
 end;
 
-procedure TBlockCipher128.DecryptCBC(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptCBC(const Indata; var Outdata; Size: LongWord);
 var
-  i: longword;
+  i: LongWord;
   p1, p2: PByte;
-  Temp: array[0..15] of byte;
+  Temp: array[0..15] of Byte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
+  p1 := @Indata;
+  p2 := @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
   for i:= 1 to (Size div 16) do
   begin
-    Move(p1^,p2^,16);
-    Move(p1^,Temp,16);
-    DecryptECB(p2^,p2^);
-    XorBlock(p2^,CV,16);
-    Move(Temp,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+    Move(p1^, p2^, 16);
+    Move(p1^, Temp, 16);
+    DecryptECB(p2^, p2^);
+    XorBlock(p2^, CV, 16);
+    Move(Temp, CV, 16);
+    {$IFDEF DELPHIXE2_UP} p1 := PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2 := PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
   end;
-  if (Size mod 16)<> 0 then
+  if (Size mod 16) <> 0 then
   begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, Size mod 16);
+    XorBlock(p2^, CV, Size mod 16);
   end;
 end;
 
-procedure TBlockCipher128.EncryptCFB8bit(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptCFB8bit(const Indata; var Outdata; Size: LongWord);
 var
-  i: longword;
-  p1, p2: Pbyte;
-  Temp: array[0..15] of byte;
+  i: LongWord;
+  p1, p2: PByte;
+  Temp: array[0..15] of Byte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
+  p1 := @Indata;
+  p2 := @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to Size do
+  for i := 1 to Size do
   begin
-    EncryptECB(CV,Temp);
-    p2^:= p1^ xor Temp[0];
-    Move(CV[1],CV[0],15);
-    CV[15]:= p2^;
+    EncryptECB(CV, Temp);
+    p2^ := p1^ xor Temp[0];
+    Move(CV[1], CV[0], 15);
+    CV[15] := p2^;
     Inc(p1);
     Inc(p2);
   end;
 end;
 
-procedure TBlockCipher128.DecryptCFB8bit(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptCFB8bit(const Indata; var Outdata; Size: LongWord);
 var
-  i: longword;
-  p1, p2: Pbyte;
-  TempByte: byte;
-  Temp: array[0..15] of byte;
+  i: LongWord;
+  p1, p2: PByte;
+  TempByte: Byte;
+  Temp: array[0..15] of Byte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
+  p1 := @Indata;
+  p2 := @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to Size do
+  for i := 1 to Size do
   begin
-    TempByte:= p1^;
-    EncryptECB(CV,Temp);
-    p2^:= p1^ xor Temp[0];
-    Move(CV[1],CV[0],15);
-    CV[15]:= TempByte;
+    TempByte := p1^;
+    EncryptECB(CV, Temp);
+    p2^ := p1^ xor Temp[0];
+    Move(CV[1], CV[0], 15);
+    CV[15] := TempByte;
     Inc(p1);
     Inc(p2);
   end;
 end;
 
-procedure TBlockCipher128.EncryptCFBblock(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptCFBblock(const Indata; var Outdata; Size: LongWord);
 var
-  i: longword;
+  i: LongWord;
   p1, p2: PByte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 16) do
+  p1 := @Indata;
+  p2 := @Outdata;
+  for i := 1 to (Size div 16) do
   begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    Move(p2^,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, 16);
+    XorBlock(p2^, CV, 16);
+    Move(p2^, CV, 16);
+    {$IFDEF DELPHIXE2_UP} p1 := PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2 := PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
   end;
-  if (Size mod 16)<> 0 then
+  if (Size mod 16) <> 0 then
   begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, Size mod 16);
+    XorBlock(p2^, CV, Size mod 16);
   end;
 end;
 
-procedure TBlockCipher128.DecryptCFBblock(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptCFBblock(const Indata; var Outdata; Size: LongWord);
 var
-  i: longword;
+  i: LongWord;
   p1, p2: PByte;
-  Temp: array[0..15] of byte;
+  Temp: array[0..15] of Byte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
+  p1 := @Indata;
+  p2 := @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 16) do
+  for i := 1 to (Size div 16) do
   begin
-    Move(p1^,Temp,16);
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    Move(Temp,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+    Move(p1^, Temp, 16);
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, 16);
+    XorBlock(p2^, CV, 16);
+    Move(Temp, CV, 16);
+    {$IFDEF DELPHIXE2_UP} p1 := PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2 := PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
   end;
-  if (Size mod 16)<> 0 then
+  if (Size mod 16) <> 0 then
   begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
-  end;
-end;
-
-procedure TBlockCipher128.EncryptOFB(const Indata; var Outdata; Size: longword);
-var
-  i: longword;
-  p1, p2: PByte;
-begin
-  CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 16) do
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
-  end;
-  if (Size mod 16)<> 0 then
-  begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, Size mod 16);
+    XorBlock(p2^, CV, Size mod 16);
   end;
 end;
 
-procedure TBlockCipher128.DecryptOFB(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.EncryptOFB(const Indata; var Outdata; Size: LongWord);
 var
-  i: longword;
+  i: LongWord;
   p1, p2: PByte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
-  for i:= 1 to (Size div 16) do
+  p1 := @Indata;
+  p2 := @Outdata;
+  for i := 1 to (Size div 16) do
   begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,16);
-    XorBlock(p2^,CV,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, 16);
+    XorBlock(p2^, CV, 16);
+    {$IFDEF DELPHIXE2_UP} p1 := PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2 := PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
   end;
-  if (Size mod 16)<> 0 then
+  if (Size mod 16) <> 0 then
   begin
-    EncryptECB(CV,CV);
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,CV,Size mod 16);
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, Size mod 16);
+    XorBlock(p2^, CV, Size mod 16);
   end;
 end;
 
-procedure TBlockCipher128.EncryptCTR(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptOFB(const Indata; var Outdata; Size: LongWord);
 var
-  temp: array[0..15] of byte;
-  i: longword;
+  i: LongWord;
   p1, p2: PByte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
+  p1 := @Indata;
+  p2 := @Outdata;
+  for i := 1 to (Size div 16) do
+  begin
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, 16);
+    XorBlock(p2^, CV, 16);
+    {$IFDEF DELPHIXE2_UP} p1 := PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2 := PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+  end;
+  if (Size mod 16) <> 0 then
+  begin
+    EncryptECB(CV, CV);
+    Move(p1^, p2^, Size mod 16);
+    XorBlock(p2^, CV, Size mod 16);
+  end;
+end;
+
+procedure TBlockCipher128.EncryptCTR(const Indata; var Outdata; Size: LongWord);
+var
+  temp: array[0..15] of Byte;
+  i: LongWord;
+  p1, p2: PByte;
+begin
+  CheckInitialized;
+  p1 := @Indata;
+  p2 := @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 16) do
+  for i := 1 to (Size div 16) do
   begin
     EncryptECB(CV,temp);
     IncCounter;
-    Move(p1^,p2^,16);
-    XorBlock(p2^,temp,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+    Move(p1^, p2^, 16);
+    XorBlock(p2^, temp, 16);
+    {$IFDEF DELPHIXE2_UP} p1 := PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2 := PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
   end;
-  if (Size mod 16)<> 0 then
+  if (Size mod 16) <> 0 then
   begin
-    EncryptECB(CV,temp);
+    EncryptECB(CV, temp);
     IncCounter;
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,temp,Size mod 16);
+    Move(p1^, p2^, Size mod 16);
+    XorBlock(p2^, temp, Size mod 16);
   end;
 end;
 
-procedure TBlockCipher128.DecryptCTR(const Indata; var Outdata; Size: longword);
+procedure TBlockCipher128.DecryptCTR(const Indata; var Outdata; Size: LongWord);
 var
-  temp: array[0..15] of byte;
-  i: longword;
+  temp: array[0..15] of Byte;
+  i: LongWord;
   p1, p2: PByte;
 begin
   CheckInitialized;
-  p1:= @Indata;
-  p2:= @Outdata;
+  p1 := @Indata;
+  p2 := @Outdata;
   FillChar(Temp, SizeOf(Temp), 0);
-  for i:= 1 to (Size div 16) do
+  for i := 1 to (Size div 16) do
   begin
-    EncryptECB(CV,temp);
+    EncryptECB(CV, temp);
     IncCounter;
-    Move(p1^,p2^,16);
-    XorBlock(p2^,temp,16);
-    {$IFDEF DELPHIXE2_UP} p1:= PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
-    {$IFDEF DELPHIXE2_UP} p2:= PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
+    Move(p1^, p2^, 16);
+    XorBlock(p2^, temp, 16);
+    {$IFDEF DELPHIXE2_UP} p1 := PByte(p1) + 16; {$ELSE} Inc(p1, 16); {$ENDIF}
+    {$IFDEF DELPHIXE2_UP} p2 := PByte(p2) + 16; {$ELSE} Inc(p2, 16); {$ENDIF}
   end;
-  if (Size mod 16)<> 0 then
+  if (Size mod 16) <> 0 then
   begin
-    EncryptECB(CV,temp);
+    EncryptECB(CV, temp);
     IncCounter;
-    Move(p1^,p2^,Size mod 16);
-    XorBlock(p2^,temp,Size mod 16);
+    Move(p1^, p2^, Size mod 16);
+    XorBlock(p2^, temp, Size mod 16);
   end;
 end;
 
 { TAESCipher }
 
 const
-  BC= 4;
-  MAXBC= 8;
-  MAXKC= 8;
+  BC    = 4;
+  MAXBC = 8;
+  MAXKC = 8;
 
-  S: array[0..255] of byte= (
+  S: array[0..255] of Byte = (
      99, 124, 119, 123, 242, 107, 111, 197,  48,   1, 103,  43, 254, 215, 171, 118,
     202, 130, 201, 125, 250,  89,  71, 240, 173, 212, 162, 175, 156, 164, 114, 192,
     183, 253, 147,  38,  54,  63, 247, 204,  52, 165, 229, 241, 113, 216,  49,  21,
@@ -809,7 +741,7 @@ const
     112,  62, 181, 102,  72,   3, 246,  14,  97,  53,  87, 185, 134, 193,  29, 158,
     225, 248, 152,  17, 105, 217, 142, 148, 155,  30, 135, 233, 206,  85,  40, 223,
     140, 161, 137,  13, 191, 230,  66, 104,  65, 153,  45,  15, 176,  84, 187,  22);
-  T1: array[0..255,0..3] of byte= (
+  T1: array[0..255, 0..3] of Byte = (
     ($c6,$63,$63,$a5), ($f8,$7c,$7c,$84), ($ee,$77,$77,$99), ($f6,$7b,$7b,$8d),
     ($ff,$f2,$f2,$0d), ($d6,$6b,$6b,$bd), ($de,$6f,$6f,$b1), ($91,$c5,$c5,$54),
     ($60,$30,$30,$50), ($02,$01,$01,$03), ($ce,$67,$67,$a9), ($56,$2b,$2b,$7d),
@@ -874,7 +806,7 @@ const
     ($65,$bf,$bf,$da), ($d7,$e6,$e6,$31), ($84,$42,$42,$c6), ($d0,$68,$68,$b8),
     ($82,$41,$41,$c3), ($29,$99,$99,$b0), ($5a,$2d,$2d,$77), ($1e,$0f,$0f,$11),
     ($7b,$b0,$b0,$cb), ($a8,$54,$54,$fc), ($6d,$bb,$bb,$d6), ($2c,$16,$16,$3a));
- T2: array[0..255,0..3] of byte= (
+ T2: array[0..255, 0..3] of Byte = (
     ($a5,$c6,$63,$63), ($84,$f8,$7c,$7c), ($99,$ee,$77,$77), ($8d,$f6,$7b,$7b),
     ($0d,$ff,$f2,$f2), ($bd,$d6,$6b,$6b), ($b1,$de,$6f,$6f), ($54,$91,$c5,$c5),
     ($50,$60,$30,$30), ($03,$02,$01,$01), ($a9,$ce,$67,$67), ($7d,$56,$2b,$2b),
@@ -939,7 +871,7 @@ const
     ($da,$65,$bf,$bf), ($31,$d7,$e6,$e6), ($c6,$84,$42,$42), ($b8,$d0,$68,$68),
     ($c3,$82,$41,$41), ($b0,$29,$99,$99), ($77,$5a,$2d,$2d), ($11,$1e,$0f,$0f),
     ($cb,$7b,$b0,$b0), ($fc,$a8,$54,$54), ($d6,$6d,$bb,$bb), ($3a,$2c,$16,$16));
-  T3: array[0..255,0..3] of byte= (
+  T3: array[0..255, 0..3] of Byte = (
     ($63,$a5,$c6,$63), ($7c,$84,$f8,$7c), ($77,$99,$ee,$77), ($7b,$8d,$f6,$7b),
     ($f2,$0d,$ff,$f2), ($6b,$bd,$d6,$6b), ($6f,$b1,$de,$6f), ($c5,$54,$91,$c5),
     ($30,$50,$60,$30), ($01,$03,$02,$01), ($67,$a9,$ce,$67), ($2b,$7d,$56,$2b),
@@ -1004,7 +936,7 @@ const
     ($bf,$da,$65,$bf), ($e6,$31,$d7,$e6), ($42,$c6,$84,$42), ($68,$b8,$d0,$68),
     ($41,$c3,$82,$41), ($99,$b0,$29,$99), ($2d,$77,$5a,$2d), ($0f,$11,$1e,$0f),
     ($b0,$cb,$7b,$b0), ($54,$fc,$a8,$54), ($bb,$d6,$6d,$bb), ($16,$3a,$2c,$16));
-  T4: array[0..255,0..3] of byte= (
+  T4: array[0..255, 0..3] of Byte = (
     ($63,$63,$a5,$c6), ($7c,$7c,$84,$f8), ($77,$77,$99,$ee), ($7b,$7b,$8d,$f6),
     ($f2,$f2,$0d,$ff), ($6b,$6b,$bd,$d6), ($6f,$6f,$b1,$de), ($c5,$c5,$54,$91),
     ($30,$30,$50,$60), ($01,$01,$03,$02), ($67,$67,$a9,$ce), ($2b,$2b,$7d,$56),
@@ -1069,7 +1001,7 @@ const
     ($bf,$bf,$da,$65), ($e6,$e6,$31,$d7), ($42,$42,$c6,$84), ($68,$68,$b8,$d0),
     ($41,$41,$c3,$82), ($99,$99,$b0,$29), ($2d,$2d,$77,$5a), ($0f,$0f,$11,$1e),
     ($b0,$b0,$cb,$7b), ($54,$54,$fc,$a8), ($bb,$bb,$d6,$6d), ($16,$16,$3a,$2c));
-  T5: array[0..255,0..3] of byte= (
+  T5: array[0..255, 0..3] of Byte = (
     ($51,$f4,$a7,$50), ($7e,$41,$65,$53), ($1a,$17,$a4,$c3), ($3a,$27,$5e,$96),
     ($3b,$ab,$6b,$cb), ($1f,$9d,$45,$f1), ($ac,$fa,$58,$ab), ($4b,$e3,$03,$93),
     ($20,$30,$fa,$55), ($ad,$76,$6d,$f6), ($88,$cc,$76,$91), ($f5,$02,$4c,$25),
@@ -1134,7 +1066,7 @@ const
     ($16,$1d,$c3,$72), ($bc,$e2,$25,$0c), ($28,$3c,$49,$8b), ($ff,$0d,$95,$41),
     ($39,$a8,$01,$71), ($08,$0c,$b3,$de), ($d8,$b4,$e4,$9c), ($64,$56,$c1,$90),
     ($7b,$cb,$84,$61), ($d5,$32,$b6,$70), ($48,$6c,$5c,$74), ($d0,$b8,$57,$42));
-  T6: array[0..255,0..3] of byte= (
+  T6: array[0..255, 0..3] of Byte = (
     ($50,$51,$f4,$a7), ($53,$7e,$41,$65), ($c3,$1a,$17,$a4), ($96,$3a,$27,$5e),
     ($cb,$3b,$ab,$6b), ($f1,$1f,$9d,$45), ($ab,$ac,$fa,$58), ($93,$4b,$e3,$03),
     ($55,$20,$30,$fa), ($f6,$ad,$76,$6d), ($91,$88,$cc,$76), ($25,$f5,$02,$4c),
@@ -1199,7 +1131,7 @@ const
     ($72,$16,$1d,$c3), ($0c,$bc,$e2,$25), ($8b,$28,$3c,$49), ($41,$ff,$0d,$95),
     ($71,$39,$a8,$01), ($de,$08,$0c,$b3), ($9c,$d8,$b4,$e4), ($90,$64,$56,$c1),
     ($61,$7b,$cb,$84), ($70,$d5,$32,$b6), ($74,$48,$6c,$5c), ($42,$d0,$b8,$57));
-  T7: array[0..255,0..3] of byte= (
+  T7: array[0..255, 0..3] of Byte = (
     ($a7,$50,$51,$f4), ($65,$53,$7e,$41), ($a4,$c3,$1a,$17), ($5e,$96,$3a,$27),
     ($6b,$cb,$3b,$ab), ($45,$f1,$1f,$9d), ($58,$ab,$ac,$fa), ($03,$93,$4b,$e3),
     ($fa,$55,$20,$30), ($6d,$f6,$ad,$76), ($76,$91,$88,$cc), ($4c,$25,$f5,$02),
@@ -1264,7 +1196,7 @@ const
     ($c3,$72,$16,$1d), ($25,$0c,$bc,$e2), ($49,$8b,$28,$3c), ($95,$41,$ff,$0d),
     ($01,$71,$39,$a8), ($b3,$de,$08,$0c), ($e4,$9c,$d8,$b4), ($c1,$90,$64,$56),
     ($84,$61,$7b,$cb), ($b6,$70,$d5,$32), ($5c,$74,$48,$6c), ($57,$42,$d0,$b8));
-  T8: array[0..255,0..3] of byte= (
+  T8: array[0..255, 0..3] of Byte = (
     ($f4,$a7,$50,$51), ($41,$65,$53,$7e), ($17,$a4,$c3,$1a), ($27,$5e,$96,$3a),
     ($ab,$6b,$cb,$3b), ($9d,$45,$f1,$1f), ($fa,$58,$ab,$ac), ($e3,$03,$93,$4b),
     ($30,$fa,$55,$20), ($76,$6d,$f6,$ad), ($cc,$76,$91,$88), ($02,$4c,$25,$f5),
@@ -1329,7 +1261,7 @@ const
     ($1d,$c3,$72,$16), ($e2,$25,$0c,$bc), ($3c,$49,$8b,$28), ($0d,$95,$41,$ff),
     ($a8,$01,$71,$39), ($0c,$b3,$de,$08), ($b4,$e4,$9c,$d8), ($56,$c1,$90,$64),
     ($cb,$84,$61,$7b), ($32,$b6,$70,$d5), ($6c,$5c,$74,$48), ($b8,$57,$42,$d0));
-  S5: array[0..255] of byte= (
+  S5: array[0..255] of Byte = (
     $52,$09,$6a,$d5,
     $30,$36,$a5,$38,
     $bf,$40,$a3,$9e,
@@ -1394,7 +1326,7 @@ const
     $ba,$77,$d6,$26,
     $e1,$69,$14,$63,
     $55,$21,$0c,$7d);
-  U1: array[0..255,0..3] of byte= (
+  U1: array[0..255, 0..3] of Byte = (
     ($00,$00,$00,$00), ($0e,$09,$0d,$0b), ($1c,$12,$1a,$16), ($12,$1b,$17,$1d),
     ($38,$24,$34,$2c), ($36,$2d,$39,$27), ($24,$36,$2e,$3a), ($2a,$3f,$23,$31),
     ($70,$48,$68,$58), ($7e,$41,$65,$53), ($6c,$5a,$72,$4e), ($62,$53,$7f,$45),
@@ -1459,7 +1391,7 @@ const
     ($ef,$15,$e8,$e6), ($e1,$1c,$e5,$ed), ($f3,$07,$f2,$f0), ($fd,$0e,$ff,$fb),
     ($a7,$79,$b4,$92), ($a9,$70,$b9,$99), ($bb,$6b,$ae,$84), ($b5,$62,$a3,$8f),
     ($9f,$5d,$80,$be), ($91,$54,$8d,$b5), ($83,$4f,$9a,$a8), ($8d,$46,$97,$a3));
-  U2: array[0..255,0..3] of byte= (
+  U2: array[0..255, 0..3] of Byte = (
     ($00,$00,$00,$00), ($0b,$0e,$09,$0d), ($16,$1c,$12,$1a), ($1d,$12,$1b,$17),
     ($2c,$38,$24,$34), ($27,$36,$2d,$39), ($3a,$24,$36,$2e), ($31,$2a,$3f,$23),
     ($58,$70,$48,$68), ($53,$7e,$41,$65), ($4e,$6c,$5a,$72), ($45,$62,$53,$7f),
@@ -1524,7 +1456,7 @@ const
     ($e6,$ef,$15,$e8), ($ed,$e1,$1c,$e5), ($f0,$f3,$07,$f2), ($fb,$fd,$0e,$ff),
     ($92,$a7,$79,$b4), ($99,$a9,$70,$b9), ($84,$bb,$6b,$ae), ($8f,$b5,$62,$a3),
     ($be,$9f,$5d,$80), ($b5,$91,$54,$8d), ($a8,$83,$4f,$9a), ($a3,$8d,$46,$97));
-  U3: array[0..255,0..3] of byte= (
+  U3: array[0..255, 0..3] of Byte = (
     ($00,$00,$00,$00), ($0d,$0b,$0e,$09), ($1a,$16,$1c,$12), ($17,$1d,$12,$1b),
     ($34,$2c,$38,$24), ($39,$27,$36,$2d), ($2e,$3a,$24,$36), ($23,$31,$2a,$3f),
     ($68,$58,$70,$48), ($65,$53,$7e,$41), ($72,$4e,$6c,$5a), ($7f,$45,$62,$53),
@@ -1589,7 +1521,7 @@ const
     ($e8,$e6,$ef,$15), ($e5,$ed,$e1,$1c), ($f2,$f0,$f3,$07), ($ff,$fb,$fd,$0e),
     ($b4,$92,$a7,$79), ($b9,$99,$a9,$70), ($ae,$84,$bb,$6b), ($a3,$8f,$b5,$62),
     ($80,$be,$9f,$5d), ($8d,$b5,$91,$54), ($9a,$a8,$83,$4f), ($97,$a3,$8d,$46));
-  U4: array[0..255,0..3] of byte= (
+  U4: array[0..255, 0..3] of Byte = (
     ($00,$00,$00,$00), ($09,$0d,$0b,$0e), ($12,$1a,$16,$1c), ($1b,$17,$1d,$12),
     ($24,$34,$2c,$38), ($2d,$39,$27,$36), ($36,$2e,$3a,$24), ($3f,$23,$31,$2a),
     ($48,$68,$58,$70), ($41,$65,$53,$7e), ($5a,$72,$4e,$6c), ($53,$7f,$45,$62),
@@ -1655,249 +1587,249 @@ const
     ($79,$b4,$92,$a7), ($70,$b9,$99,$a9), ($6b,$ae,$84,$bb), ($62,$a3,$8f,$b5),
     ($5d,$80,$be,$9f), ($54,$8d,$b5,$91), ($4f,$9a,$a8,$83), ($46,$97,$a3,$8d));
 
-  rcon: array[0..29] of cardinal= (
+  rcon: array[0..29] of Cardinal = (
     $01, $02, $04, $08, $10, $20, $40, $80, $1b, $36, $6c, $d8, $ab, $4d, $9a,
     $2f, $5e, $bc, $63, $c6, $97, $35, $6a, $d4, $b3, $7d, $fa, $ef, $c5, $91);
 
-class function TAESCipher.GetMaxKeySize: integer;
+class function TAESCipher.GetMaxKeySize: Integer;
 begin
   Result:= 256;
 end;
 
-procedure InvMixColumn(a: PByteArray; BC: byte);
+procedure InvMixColumn(a: PByteArray; BC: Byte);
 var
-  j: longword;
+  j: LongWord;
 begin
-  for j:= 0 to (BC-1) do
-    PDWord(@(a^[j*4]))^:= PDWord(@U1[a^[j*4+0]])^ xor
-                       PDWord(@U2[a^[j*4+1]])^ xor
-                       PDWord(@U3[a^[j*4+2]])^ xor
-                       PDWord(@U4[a^[j*4+3]])^;
+  for j := 0 to (BC-1) do
+    PDWord(@(a^[j*4]))^ := PDWord(@U1[a^[j*4+0]])^ xor
+                           PDWord(@U2[a^[j*4+1]])^ xor
+                           PDWord(@U3[a^[j*4+2]])^ xor
+                           PDWord(@U4[a^[j*4+3]])^;
 end;
 
-procedure TAESCipher.InitKey(const Key; Size: longword);
+procedure TAESCipher.InitKey(const Key; Size: LongWord);
 var
-  KC, ROUNDS, j, r, t, rconpointer: longword;
-  tk: array[0..MAXKC-1,0..3] of byte;
+  KC, ROUNDS, j, r, t, rconpointer: LongWord;
+  tk: array[0..MAXKC-1, 0..3] of Byte;
 begin
-  Size:= Size div 8;
+  Size := Size div 8;
 
-  FillChar(tk,Sizeof(tk),0);
-  Move(Key,tk,Size);
-  if Size<= 16 then
+  FillChar(tk, Sizeof(tk), 0);
+  Move(Key, tk, Size);
+  if Size <= 16 then
   begin
-    KC:= 4;
-    Rounds:= 10;
+    KC := 4;
+    Rounds := 10;
   end
-  else if Size<= 24 then
+  else if Size <= 24 then
   begin
-    KC:= 6;
-    Rounds:= 12;
+    KC := 6;
+    Rounds := 12;
   end
   else
   begin
-    KC:= 8;
-    Rounds:= 14;
+    KC := 8;
+    Rounds := 14;
   end;
-  numrounds:= rounds;
-  r:= 0;
-  t:= 0;
-  j:= 0;
-  while (j< KC) and (r< (rounds+1)) do
+  numrounds := rounds;
+  r := 0;
+  t := 0;
+  j := 0;
+  while (j < KC) and (r < (rounds+1)) do
   begin
-    while (j< KC) and (t< BC) do
+    while (j < KC) and (t < BC) do
     begin
-      rk[r,t]:= PDWord(@tk[j])^;
+      rk[r,t] := PDWord(@tk[j])^;
       Inc(j);
       Inc(t);
     end;
-    if t= BC then
+    if t = BC then
     begin
-      t:= 0;
+      t := 0;
       Inc(r);
     end;
   end;
-  rconpointer:= 0;
-  while (r< (rounds+1)) do
+  rconpointer := 0;
+  while (r < (rounds+1)) do
   begin
-    tk[0,0]:= tk[0,0] xor S[tk[KC-1,1]];
-    tk[0,1]:= tk[0,1] xor S[tk[KC-1,2]];
-    tk[0,2]:= tk[0,2] xor S[tk[KC-1,3]];
-    tk[0,3]:= tk[0,3] xor S[tk[KC-1,0]];
-    tk[0,0]:= tk[0,0] xor rcon[rconpointer];
+    tk[0,0] := tk[0,0] xor S[tk[KC-1,1]];
+    tk[0,1] := tk[0,1] xor S[tk[KC-1,2]];
+    tk[0,2] := tk[0,2] xor S[tk[KC-1,3]];
+    tk[0,3] := tk[0,3] xor S[tk[KC-1,0]];
+    tk[0,0] := tk[0,0] xor rcon[rconpointer];
     Inc(rconpointer);
-    if KC<> 8 then
+    if KC <> 8 then
     begin
-      for j:= 1 to (KC-1) do
-        PDWord(@tk[j])^:= PDWord(@tk[j])^ xor PDWord(@tk[j-1])^;
+      for j := 1 to (KC-1) do
+        PDWord(@tk[j])^ := PDWord(@tk[j])^ xor PDWord(@tk[j-1])^;
     end
     else
     begin
-      for j:= 1 to ((KC div 2)-1) do
-        PDWord(@tk[j])^:= PDWord(@tk[j])^ xor PDWord(@tk[j-1])^;
-      tk[KC div 2,0]:= tk[KC div 2,0] xor S[tk[KC div 2 - 1,0]];
-      tk[KC div 2,1]:= tk[KC div 2,1] xor S[tk[KC div 2 - 1,1]];
-      tk[KC div 2,2]:= tk[KC div 2,2] xor S[tk[KC div 2 - 1,2]];
-      tk[KC div 2,3]:= tk[KC div 2,3] xor S[tk[KC div 2 - 1,3]];
-      for j:= ((KC div 2) + 1) to (KC-1) do
-        PDWord(@tk[j])^:= PDWord(@tk[j])^ xor PDWord(@tk[j-1])^;
+      for j := 1 to ((KC div 2)-1) do
+        PDWord(@tk[j])^ := PDWord(@tk[j])^ xor PDWord(@tk[j-1])^;
+      tk[KC div 2,0] := tk[KC div 2,0] xor S[tk[KC div 2 - 1,0]];
+      tk[KC div 2,1] := tk[KC div 2,1] xor S[tk[KC div 2 - 1,1]];
+      tk[KC div 2,2] := tk[KC div 2,2] xor S[tk[KC div 2 - 1,2]];
+      tk[KC div 2,3] := tk[KC div 2,3] xor S[tk[KC div 2 - 1,3]];
+      for j := ((KC div 2) + 1) to (KC-1) do
+        PDWord(@tk[j])^ := PDWord(@tk[j])^ xor PDWord(@tk[j-1])^;
     end;
-    j:= 0;
-    while (j< KC) and (r< (rounds+1)) do
+    j := 0;
+    while (j < KC) and (r < (rounds+1)) do
     begin
-      while (j< KC) and (t< BC) do
+      while (j < KC) and (t < BC) do
       begin
-        rk[r,t]:= PDWord(@tk[j])^;
+        rk[r,t] := PDWord(@tk[j])^;
         Inc(j);
         Inc(t);
       end;
-      if t= BC then
+      if t = BC then
       begin
         Inc(r);
-        t:= 0;
+        t := 0;
       end;
     end;
   end;
-  Move(rk,drk,Sizeof(rk));
-  for r:= 1 to (numrounds-1) do
-    InvMixColumn(@drk[r],BC);
+  Move(rk, drk, Sizeof(rk));
+  for r := 1 to (numrounds-1) do
+    InvMixColumn(@drk[r], BC);
 end;
 
 procedure TAESCipher.Burn;
 begin
-  numrounds:= 0;
-  FillChar(rk,Sizeof(rk),0);
-  FillChar(drk,Sizeof(drk),0);
+  numrounds := 0;
+  FillChar(rk, Sizeof(rk), 0);
+  FillChar(drk, Sizeof(drk), 0);
   inherited Burn;
 end;
 
 procedure TAESCipher.EncryptECB(const InData; var OutData);
 var
-  r: longword;
-  tempb: array[0..MAXBC-1,0..3] of byte;
-  a: array[0..MAXBC,0..3] of byte;
+  r: LongWord;
+  tempb: array[0..MAXBC-1, 0..3] of Byte;
+  a: array[0..MAXBC, 0..3] of Byte;
 begin
   CheckInitialized;
-  PDword(@a[0,0])^:= PDword(@InData)^;
-  PDword(@a[1,0])^:= PDword(PointerToInt(@InData)+4)^;
-  PDword(@a[2,0])^:= PDword(PointerToInt(@InData)+8)^;
-  PDword(@a[3,0])^:= PDword(PointerToInt(@InData)+12)^;
-  for r:= 0 to (numrounds-2) do
+  PDWord(@a[0,0])^ := PDWord(@InData)^;
+  PDWord(@a[1,0])^ := PDWord(PointerToInt(@InData)+4)^;
+  PDWord(@a[2,0])^ := PDWord(PointerToInt(@InData)+8)^;
+  PDWord(@a[3,0])^ := PDWord(PointerToInt(@InData)+12)^;
+  for r := 0 to (numrounds-2) do
   begin
-    PDWord(@tempb[0])^:= PDWord(@a[0])^ xor rk[r,0];
-    PDWord(@tempb[1])^:= PDWord(@a[1])^ xor rk[r,1];
-    PDWord(@tempb[2])^:= PDWord(@a[2])^ xor rk[r,2];
-    PDWord(@tempb[3])^:= PDWord(@a[3])^ xor rk[r,3];
-    PDWord(@a[0])^:= PDWord(@T1[tempb[0,0]])^ xor
-                     PDWord(@T2[tempb[1,1]])^ xor
-                     PDWord(@T3[tempb[2,2]])^ xor
-                     PDWord(@T4[tempb[3,3]])^;
-    PDWord(@a[1])^:= PDWord(@T1[tempb[1,0]])^ xor
-                     PDWord(@T2[tempb[2,1]])^ xor
-                     PDWord(@T3[tempb[3,2]])^ xor
-                     PDWord(@T4[tempb[0,3]])^;
-    PDWord(@a[2])^:= PDWord(@T1[tempb[2,0]])^ xor
-                     PDWord(@T2[tempb[3,1]])^ xor
-                     PDWord(@T3[tempb[0,2]])^ xor
-                     PDWord(@T4[tempb[1,3]])^;
-    PDWord(@a[3])^:= PDWord(@T1[tempb[3,0]])^ xor
-                     PDWord(@T2[tempb[0,1]])^ xor
-                     PDWord(@T3[tempb[1,2]])^ xor
-                     PDWord(@T4[tempb[2,3]])^;
+    PDWord(@tempb[0])^ := PDWord(@a[0])^ xor rk[r,0];
+    PDWord(@tempb[1])^ := PDWord(@a[1])^ xor rk[r,1];
+    PDWord(@tempb[2])^ := PDWord(@a[2])^ xor rk[r,2];
+    PDWord(@tempb[3])^ := PDWord(@a[3])^ xor rk[r,3];
+    PDWord(@a[0])^ := PDWord(@T1[tempb[0,0]])^ xor
+                      PDWord(@T2[tempb[1,1]])^ xor
+                      PDWord(@T3[tempb[2,2]])^ xor
+                      PDWord(@T4[tempb[3,3]])^;
+    PDWord(@a[1])^ := PDWord(@T1[tempb[1,0]])^ xor
+                      PDWord(@T2[tempb[2,1]])^ xor
+                      PDWord(@T3[tempb[3,2]])^ xor
+                      PDWord(@T4[tempb[0,3]])^;
+    PDWord(@a[2])^ := PDWord(@T1[tempb[2,0]])^ xor
+                      PDWord(@T2[tempb[3,1]])^ xor
+                      PDWord(@T3[tempb[0,2]])^ xor
+                      PDWord(@T4[tempb[1,3]])^;
+    PDWord(@a[3])^ := PDWord(@T1[tempb[3,0]])^ xor
+                      PDWord(@T2[tempb[0,1]])^ xor
+                      PDWord(@T3[tempb[1,2]])^ xor
+                      PDWord(@T4[tempb[2,3]])^;
   end;
-  PDWord(@tempb[0])^:= PDWord(@a[0])^ xor rk[numrounds-1,0];
-  PDWord(@tempb[1])^:= PDWord(@a[1])^ xor rk[numrounds-1,1];
-  PDWord(@tempb[2])^:= PDWord(@a[2])^ xor rk[numrounds-1,2];
-  PDWord(@tempb[3])^:= PDWord(@a[3])^ xor rk[numrounds-1,3];
-  a[0,0]:= T1[tempb[0,0],1];
-  a[0,1]:= T1[tempb[1,1],1];
-  a[0,2]:= T1[tempb[2,2],1];
-  a[0,3]:= T1[tempb[3,3],1];
-  a[1,0]:= T1[tempb[1,0],1];
-  a[1,1]:= T1[tempb[2,1],1];
-  a[1,2]:= T1[tempb[3,2],1];
-  a[1,3]:= T1[tempb[0,3],1];
-  a[2,0]:= T1[tempb[2,0],1];
-  a[2,1]:= T1[tempb[3,1],1];
-  a[2,2]:= T1[tempb[0,2],1];
-  a[2,3]:= T1[tempb[1,3],1];
-  a[3,0]:= T1[tempb[3,0],1];
-  a[3,1]:= T1[tempb[0,1],1];
-  a[3,2]:= T1[tempb[1,2],1];
-  a[3,3]:= T1[tempb[2,3],1];
-  PDWord(@a[0])^:= PDWord(@a[0])^ xor rk[numrounds,0];
-  PDWord(@a[1])^:= PDWord(@a[1])^ xor rk[numrounds,1];
-  PDWord(@a[2])^:= PDWord(@a[2])^ xor rk[numrounds,2];
-  PDWord(@a[3])^:= PDWord(@a[3])^ xor rk[numrounds,3];
+  PDWord(@tempb[0])^ := PDWord(@a[0])^ xor rk[numrounds-1,0];
+  PDWord(@tempb[1])^ := PDWord(@a[1])^ xor rk[numrounds-1,1];
+  PDWord(@tempb[2])^ := PDWord(@a[2])^ xor rk[numrounds-1,2];
+  PDWord(@tempb[3])^ := PDWord(@a[3])^ xor rk[numrounds-1,3];
+  a[0,0] := T1[tempb[0,0],1];
+  a[0,1] := T1[tempb[1,1],1];
+  a[0,2] := T1[tempb[2,2],1];
+  a[0,3] := T1[tempb[3,3],1];
+  a[1,0] := T1[tempb[1,0],1];
+  a[1,1] := T1[tempb[2,1],1];
+  a[1,2] := T1[tempb[3,2],1];
+  a[1,3] := T1[tempb[0,3],1];
+  a[2,0] := T1[tempb[2,0],1];
+  a[2,1] := T1[tempb[3,1],1];
+  a[2,2] := T1[tempb[0,2],1];
+  a[2,3] := T1[tempb[1,3],1];
+  a[3,0] := T1[tempb[3,0],1];
+  a[3,1] := T1[tempb[0,1],1];
+  a[3,2] := T1[tempb[1,2],1];
+  a[3,3] := T1[tempb[2,3],1];
+  PDWord(@a[0])^ := PDWord(@a[0])^ xor rk[numrounds,0];
+  PDWord(@a[1])^ := PDWord(@a[1])^ xor rk[numrounds,1];
+  PDWord(@a[2])^ := PDWord(@a[2])^ xor rk[numrounds,2];
+  PDWord(@a[3])^ := PDWord(@a[3])^ xor rk[numrounds,3];
 
-  PDword(@OutData)^:= PDword(@a[0,0])^;
-  PDword(PointerToInt(@OutData)+4)^:= PDword(@a[1,0])^;
-  PDword(PointerToInt(@OutData)+8)^:= PDword(@a[2,0])^;
-  PDword(PointerToInt(@OutData)+12)^:= PDword(@a[3,0])^;
+  PDWord(@OutData)^ := PDWord(@a[0,0])^;
+  PDWord(PointerToInt(@OutData)+4)^ := PDWord(@a[1,0])^;
+  PDWord(PointerToInt(@OutData)+8)^ := PDWord(@a[2,0])^;
+  PDWord(PointerToInt(@OutData)+12)^ := PDWord(@a[3,0])^;
 end;
 
 procedure TAESCipher.DecryptECB(const InData; var OutData);
 var
-  r: longword;
-  tempb: array[0..MAXBC-1,0..3] of byte;
-  a: array[0..MAXBC,0..3] of byte;
+  r: LongWord;
+  tempb: array[0..MAXBC-1, 0..3] of Byte;
+  a: array[0..MAXBC, 0..3] of Byte;
 begin
   CheckInitialized;
-  PDword(@a[0,0])^:= PDword(@InData)^;
-  PDword(@a[1,0])^:= PDword(PointerToInt(@InData)+4)^;
-  PDword(@a[2,0])^:= PDword(PointerToInt(@InData)+8)^;
-  PDword(@a[3,0])^:= PDword(PointerToInt(@InData)+12)^;
-  for r:= NumRounds downto 2 do
+  PDWord(@a[0,0])^ := PDWord(@InData)^;
+  PDWord(@a[1,0])^ := PDWord(PointerToInt(@InData)+4)^;
+  PDWord(@a[2,0])^ := PDWord(PointerToInt(@InData)+8)^;
+  PDWord(@a[3,0])^ := PDWord(PointerToInt(@InData)+12)^;
+  for r := NumRounds downto 2 do
   begin
-    PDWord(@tempb[0])^:= PDWord(@a[0])^ xor drk[r,0];
-    PDWord(@tempb[1])^:= PDWord(@a[1])^ xor drk[r,1];
-    PDWord(@tempb[2])^:= PDWord(@a[2])^ xor drk[r,2];
-    PDWord(@tempb[3])^:= PDWord(@a[3])^ xor drk[r,3];
-    PDWord(@a[0])^:= PDWord(@T5[tempb[0,0]])^ xor
-                     PDWord(@T6[tempb[3,1]])^ xor
-                     PDWord(@T7[tempb[2,2]])^ xor
-                     PDWord(@T8[tempb[1,3]])^;
-    PDWord(@a[1])^:= PDWord(@T5[tempb[1,0]])^ xor
-                     PDWord(@T6[tempb[0,1]])^ xor
-                     PDWord(@T7[tempb[3,2]])^ xor
-                     PDWord(@T8[tempb[2,3]])^;
-    PDWord(@a[2])^:= PDWord(@T5[tempb[2,0]])^ xor
-                     PDWord(@T6[tempb[1,1]])^ xor
-                     PDWord(@T7[tempb[0,2]])^ xor
-                     PDWord(@T8[tempb[3,3]])^;
-    PDWord(@a[3])^:= PDWord(@T5[tempb[3,0]])^ xor
-                     PDWord(@T6[tempb[2,1]])^ xor
-                     PDWord(@T7[tempb[1,2]])^ xor
-                     PDWord(@T8[tempb[0,3]])^;
+    PDWord(@tempb[0])^ := PDWord(@a[0])^ xor drk[r,0];
+    PDWord(@tempb[1])^ := PDWord(@a[1])^ xor drk[r,1];
+    PDWord(@tempb[2])^ := PDWord(@a[2])^ xor drk[r,2];
+    PDWord(@tempb[3])^ := PDWord(@a[3])^ xor drk[r,3];
+    PDWord(@a[0])^ := PDWord(@T5[tempb[0,0]])^ xor
+                      PDWord(@T6[tempb[3,1]])^ xor
+                      PDWord(@T7[tempb[2,2]])^ xor
+                      PDWord(@T8[tempb[1,3]])^;
+    PDWord(@a[1])^ := PDWord(@T5[tempb[1,0]])^ xor
+                      PDWord(@T6[tempb[0,1]])^ xor
+                      PDWord(@T7[tempb[3,2]])^ xor
+                      PDWord(@T8[tempb[2,3]])^;
+    PDWord(@a[2])^ := PDWord(@T5[tempb[2,0]])^ xor
+                      PDWord(@T6[tempb[1,1]])^ xor
+                      PDWord(@T7[tempb[0,2]])^ xor
+                      PDWord(@T8[tempb[3,3]])^;
+    PDWord(@a[3])^ := PDWord(@T5[tempb[3,0]])^ xor
+                      PDWord(@T6[tempb[2,1]])^ xor
+                      PDWord(@T7[tempb[1,2]])^ xor
+                      PDWord(@T8[tempb[0,3]])^;
   end;
-  PDWord(@tempb[0])^:= PDWord(@a[0])^ xor drk[1,0];
-  PDWord(@tempb[1])^:= PDWord(@a[1])^ xor drk[1,1];
-  PDWord(@tempb[2])^:= PDWord(@a[2])^ xor drk[1,2];
-  PDWord(@tempb[3])^:= PDWord(@a[3])^ xor drk[1,3];
-  a[0,0]:= S5[tempb[0,0]];
-  a[0,1]:= S5[tempb[3,1]];
-  a[0,2]:= S5[tempb[2,2]];
-  a[0,3]:= S5[tempb[1,3]];
-  a[1,0]:= S5[tempb[1,0]];
-  a[1,1]:= S5[tempb[0,1]];
-  a[1,2]:= S5[tempb[3,2]];
-  a[1,3]:= S5[tempb[2,3]];
-  a[2,0]:= S5[tempb[2,0]];
-  a[2,1]:= S5[tempb[1,1]];
-  a[2,2]:= S5[tempb[0,2]];
-  a[2,3]:= S5[tempb[3,3]];
-  a[3,0]:= S5[tempb[3,0]];
-  a[3,1]:= S5[tempb[2,1]];
-  a[3,2]:= S5[tempb[1,2]];
-  a[3,3]:= S5[tempb[0,3]];
-  PDWord(@a[0])^:= PDWord(@a[0])^ xor drk[0,0];
-  PDWord(@a[1])^:= PDWord(@a[1])^ xor drk[0,1];
-  PDWord(@a[2])^:= PDWord(@a[2])^ xor drk[0,2];
-  PDWord(@a[3])^:= PDWord(@a[3])^ xor drk[0,3];
-  PDword(@OutData)^:= PDword(@a[0,0])^;
-  PDword(PointerToInt(@OutData)+4)^:= PDword(@a[1,0])^;
-  PDword(PointerToInt(@OutData)+8)^:= PDword(@a[2,0])^;
-  PDword(PointerToInt(@OutData)+12)^:= PDword(@a[3,0])^;
+  PDWord(@tempb[0])^ := PDWord(@a[0])^ xor drk[1,0];
+  PDWord(@tempb[1])^ := PDWord(@a[1])^ xor drk[1,1];
+  PDWord(@tempb[2])^ := PDWord(@a[2])^ xor drk[1,2];
+  PDWord(@tempb[3])^ := PDWord(@a[3])^ xor drk[1,3];
+  a[0,0] := S5[tempb[0,0]];
+  a[0,1] := S5[tempb[3,1]];
+  a[0,2] := S5[tempb[2,2]];
+  a[0,3] := S5[tempb[1,3]];
+  a[1,0] := S5[tempb[1,0]];
+  a[1,1] := S5[tempb[0,1]];
+  a[1,2] := S5[tempb[3,2]];
+  a[1,3] := S5[tempb[2,3]];
+  a[2,0] := S5[tempb[2,0]];
+  a[2,1] := S5[tempb[1,1]];
+  a[2,2] := S5[tempb[0,2]];
+  a[2,3] := S5[tempb[3,3]];
+  a[3,0] := S5[tempb[3,0]];
+  a[3,1] := S5[tempb[2,1]];
+  a[3,2] := S5[tempb[1,2]];
+  a[3,3] := S5[tempb[0,3]];
+  PDWord(@a[0])^ := PDWord(@a[0])^ xor drk[0,0];
+  PDWord(@a[1])^ := PDWord(@a[1])^ xor drk[0,1];
+  PDWord(@a[2])^ := PDWord(@a[2])^ xor drk[0,2];
+  PDWord(@a[3])^ := PDWord(@a[3])^ xor drk[0,3];
+  PDWord(@OutData)^ := PDWord(@a[0,0])^;
+  PDWord(PointerToInt(@OutData)+4)^ := PDWord(@a[1,0])^;
+  PDWord(PointerToInt(@OutData)+8)^ := PDWord(@a[2,0])^;
+  PDWord(PointerToInt(@OutData)+12)^ := PDWord(@a[3,0])^;
 end;
 
 end.
