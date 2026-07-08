@@ -12,16 +12,34 @@ A lightweight AES encryption/decryption unit for Delphi.
 
 ## Installation
 
-Copy `Prism.Crypto.AES.pas` (and its dependency `Prism.Crypto.AES.Cipher.pas`) into your project, then add the unit to your uses clause:
+Copy `Prism.Crypto.AES.pas` into your project, then add the unit to your uses clause:
 
 ```delphi
 uses
   Prism.Crypto.AES;
 ```
+## API Overview
 
-## Examples
+```delphi
+type
+  TCipherMode = (cmECB, cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR);
+  TPaddingMode = (pmZeroPadding, pmANSIX923, pmISO10126, pmISO7816, pmPKCS7, pmRandomPadding);
 
-Encrypt with Delphi:
+  TAES = class
+    class function Encrypt(const Data, Key: TBytes; KeySize: Integer; const InitVector: TBytes; CipherMode: TCipherMode; PaddingMode: TPaddingMode): TBytes;
+    class function Decrypt(const Crypt, Key: TBytes; KeySize: Integer; const InitVector: TBytes; CipherMode: TCipherMode; PaddingMode: TPaddingMode): TBytes;
+    class function EncryptCBC(const Data, Key: TBytes; const KeySize: Integer; const PaddingMode: TPaddingMode = pmPKCS7): TBytes;
+    class function DecryptCBC(const Crypt, Key: TBytes; const KeySize: Integer; const PaddingMode: TPaddingMode = pmPKCS7): TBytes;
+  end;
+```
+- `KeySize` is expressed in bits (128, 192, or 256) and must match the length of `Key` in bytes × 8.
+- Padding (`PaddingMode`) only applies to block-based chaining modes (`cmCBC`, `cmECB`); stream-style modes (`cmCFB8bit`, `cmCFBblock`, `cmOFB`, `cmCTR`) don't require padding.
+- `EncryptCBC` / `DecryptCBC` generate a random 16-byte IV (via `TGUID`), prepend it to the ciphertext on encryption, and strip it back off on decryption — handy when you'd rather not manage the IV yourself. `Encrypt` / `Decrypt` give you full control, including supplying your own IV.
+
+## Example: Encrypt in Delphi, Decrypt in Go
+
+Encrypt with Delphi (AES-256, CBC, PKCS7 padding), then Base64-encode the result:
+
 ```delphi
 uses
   Prism.Crypto.AES, System.NetEncoding;
@@ -30,9 +48,9 @@ procedure TForm1.BtnEncryptClick(Sender: TObject);
 var
   OriginalText, Key, IV, EncryptedText: TBytes;
 begin
-  OriginalText := TEncoding.ANSI.GetBytes('This is the original text');
-  Key := TEncoding.ANSI.GetBytes('Key1234567890-1234567890-1234567'); // 256 bits-32 bytes
-  IV := TEncoding.ANSI.GetBytes('1234567890123456'); // 16 bytes
+  OriginalText := TEncoding.UTF8.GetBytes('This is the original text');
+  Key := TEncoding.UTF8.GetBytes('Key1234567890-1234567890-1234567'); // 256 bits-32 bytes
+  IV := TEncoding.UTF8.GetBytes('1234567890123456'); // 16 bytes
 
   EncryptedText := TAES.Encrypt(OriginalText, Key, 256, IV, cmCBC, pmPKCS7);
   Memo1.Text := TNetEncoding.Base64.EncodeBytesToString(EncryptedText);
@@ -40,7 +58,8 @@ begin
 end;
 ```
 
-Decrypt with Golang:
+Decrypt the resulting Base64 string with Go, using only the standard library:
+
 ```go
 import (
 	"bytes"
@@ -73,6 +92,7 @@ func main() {
 	// Output: This is the original text
 }
 ```
+Because both sides use the same key, IV, chaining mode, and padding scheme, the two snippets are fully interoperable — decrypting on the Go side recovers the exact original plaintext.
 
 ## Acknowledgments
 
