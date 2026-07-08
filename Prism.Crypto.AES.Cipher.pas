@@ -49,7 +49,7 @@ type
 
   TCipherClass = class of TCipher;
 
-  TCipherMode = (cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR);
+  TCipherMode = (cmECB, cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR);
 
   EBlockCipher = class(ECipher);
 
@@ -311,32 +311,36 @@ end;
 procedure TBlockCipher.Encrypt(const Indata; var Outdata; Size: LongWord);
 begin
   case FCipherMode of
+    cmECB:
+      EncryptECB(Indata, Outdata);
     cmCBC:
-       EncryptCBC(Indata, Outdata, Size);
+      EncryptCBC(Indata, Outdata, Size);
     cmCFB8bit:
-       EncryptCFB8bit(Indata, Outdata, Size);
+      EncryptCFB8bit(Indata, Outdata, Size);
     cmCFBblock:
-       EncryptCFBblock(Indata, Outdata, Size);
+      EncryptCFBblock(Indata, Outdata, Size);
     cmOFB:
-       EncryptOFB(Indata, Outdata, Size);
+      EncryptOFB(Indata, Outdata, Size);
     cmCTR:
-       EncryptCTR(Indata, Outdata, Size);
+      EncryptCTR(Indata, Outdata, Size);
   end;
 end;
 
 procedure TBlockCipher.Decrypt(const Indata; var Outdata; Size: LongWord);
 begin
   case FCipherMode of
+    cmECB:
+      DecryptECB(Indata, Outdata);
     cmCBC:
-       DecryptCBC(Indata, Outdata, Size);
+      DecryptCBC(Indata, Outdata, Size);
     cmCFB8bit:
-       DecryptCFB8bit(Indata, Outdata, Size);
+      DecryptCFB8bit(Indata, Outdata, Size);
     cmCFBblock:
-       DecryptCFBblock(Indata, Outdata, Size);
+      DecryptCFBblock(Indata, Outdata, Size);
     cmOFB:
-       DecryptOFB(Indata, Outdata, Size);
+      DecryptOFB(Indata, Outdata, Size);
     cmCTR:
-       DecryptCTR(Indata, Outdata, Size);
+      DecryptCTR(Indata, Outdata, Size);
   end;
 end;
 
@@ -414,7 +418,7 @@ begin
   InitKey(Key, Size);
   if InitVector = nil then
   begin
-    FillChar(IV, 16, {$IFDEF DCP1COMPAT}$FF{$ELSE}0{$ENDIF});
+    FillChar(IV, 16, 0);
     EncryptECB(IV, IV);
     Reset;
   end

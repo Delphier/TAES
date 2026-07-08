@@ -1,95 +1,65 @@
-// Code Owner: https://stackoverflow.com/a/43591761
-// Clue from: https://github.com/halilhanbadem/AES-256-CBCEncryptionDelphi_PHP
-
 unit Prism.Crypto.AES;
 
 interface
 
 uses
-  System.SysUtils;
+  System.SysUtils, Prism.Crypto.AES.Cipher;
 
 type
-  TChainingMode = (cmCBC, cmCFB8bit, cmCFBblock, cmOFB, cmCTR, cmECB);
   TPaddingMode = (pmZeroPadding, pmANSIX923, pmISO10126, pmISO7816, pmPKCS7, pmRandomPadding);
 
   TAES = class
   private
-    class procedure BytePadding(var Data: TBytes; BlockSize: integer; PaddingMode: TPaddingMode);
+    class procedure BytePadding(var Data: TBytes; BlockSize: Integer; PaddingMode: TPaddingMode);
   public
-    class function Encrypt(const Data: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
-    class function EncryptCBC(const AData, AKey: TBytes; const AKeySize: Integer; const APaddingMode: TPaddingMode = pmPKCS7): TBytes;
-    class function Decrypt(const Crypt: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
-    class function DecryptCBC(const ACrypt, AKey: TBytes; const AKeySize: Integer; const APaddingMode: TPaddingMode = pmPKCS7): TBytes;
+    class function Encrypt(const Data, Key: TBytes; KeySize: Integer; const InitVector: TBytes; CipherMode: TCipherMode; PaddingMode: TPaddingMode): TBytes;
+    class function EncryptCBC(const Data, Key: TBytes; const KeySize: Integer; const PaddingMode: TPaddingMode = pmPKCS7): TBytes;
+    class function Decrypt(const Crypt, Key: TBytes; KeySize: Integer; const InitVector: TBytes; CipherMode: TCipherMode; PaddingMode: TPaddingMode): TBytes;
+    class function DecryptCBC(const Crypt, Key: TBytes; const KeySize: Integer; const PaddingMode: TPaddingMode = pmPKCS7): TBytes;
   end;
 
 implementation
 
-uses
-  Prism.Crypto.AES.Cipher;
-
-class function TAES.Encrypt(const Data: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
+class function TAES.Encrypt(const Data, Key: TBytes; KeySize: Integer; const InitVector: TBytes; CipherMode: TCipherMode; PaddingMode: TPaddingMode): TBytes;
 var
   Cipher: TAESCipher;
 begin
   Cipher := TAESCipher.Create;
   try
     Cipher.Init(Key[0], KeySize, @InitVector[0]);
-    // Copy Data => Crypt
     Result := Copy(Data, 0, Length(Data));
-    // Padd Crypt to required length (for Block based algorithms)
-    if ChainingMode in [cmCBC, cmECB] then
+    if CipherMode in [cmCBC, cmECB] then
       BytePadding(Result, Cipher.BlockSize, PaddingMode);
-    // Encrypt Crypt using the algorithm specified in ChainingMode
-    case ChainingMode of
-      cmCBC:
-        Cipher.EncryptCBC(Result[0], Result[0], Length(Result));
-      cmCFB8bit:
-        Cipher.EncryptCFB8bit(Result[0], Result[0], Length(Result));
-      cmCFBblock:
-        Cipher.EncryptCFBblock(Result[0], Result[0], Length(Result));
-      cmOFB:
-        Cipher.EncryptOFB(Result[0], Result[0], Length(Result));
-      cmCTR:
-        Cipher.EncryptCTR(Result[0], Result[0], Length(Result));
-      cmECB:
-        Cipher.EncryptECB(Result[0], Result[0]);
-    end;
+    Cipher.CipherMode := CipherMode;
+    Cipher.Encrypt(Result[0], Result[0], Length(Result));
   finally
     Cipher.Free;
   end;
 end;
 
-class function TAES.EncryptCBC(const AData, AKey: TBytes; const AKeySize: Integer; const APaddingMode: TPaddingMode): TBytes;
+class function TAES.EncryptCBC(const Data, Key: TBytes; const KeySize: Integer; const PaddingMode: TPaddingMode): TBytes;
 var
   Guid: TGUID;
   IV: TBytes;
 begin
   CreateGuid(Guid);
   IV := Guid.ToByteArray;
-  Result := Encrypt(IV + AData, AKey, AKeySize, IV, cmCBC, APaddingMode);
+  Result := Encrypt(IV + Data, Key, KeySize, IV, cmCBC, PaddingMode);
 end;
 
-class function TAES.Decrypt(const Crypt: TBytes; const Key: TBytes; KeySize: integer; const InitVector: TBytes; ChainingMode: TChainingMode; PaddingMode: TPaddingMode): TBytes;
+class function TAES.Decrypt(const Crypt, Key: TBytes; KeySize: Integer; const InitVector: TBytes; CipherMode: TCipherMode; PaddingMode: TPaddingMode): TBytes;
 var
   Cipher: TAESCipher;
-  I: integer;
+  I: Integer;
 begin
   Cipher := TAESCipher.Create;
   try
     Cipher.Init(Key[0], KeySize, @InitVector[0]);
-    // Copy Crypt => Data
     Result := Copy(Crypt, 0, Length(Crypt));
-    // Decrypt Data using the algorithm specified in ChainingMode
-    case ChainingMode of
-      cmCBC: Cipher.DecryptCBC(Result[0], Result[0], Length(Result));
-      cmCFB8bit: Cipher.DecryptCFB8bit(Result[0], Result[0], Length(Result));
-      cmCFBblock: Cipher.DecryptCFBblock(Result[0], Result[0], Length(Result));
-      cmOFB: Cipher.DecryptOFB(Result[0], Result[0], Length(Result));
-      cmCTR: Cipher.DecryptCTR(Result[0], Result[0], Length(Result));
-      cmECB: Cipher.DecryptECB(Result[0], Result[0]);
-    end;
+    Cipher.CipherMode := CipherMode;
+    Cipher.Decrypt(Result[0], Result[0], Length(Result));
     // Correct the length of Data, based on the used PaddingMode (only for Block based algorithms)
-    if ChainingMode in [cmCBC, cmECB] then
+    if CipherMode in [cmCBC, cmECB] then
       case PaddingMode of
         pmANSIX923, pmISO10126, pmPKCS7: // these modes store the original Padding count in the last byte
           SetLength(Result, Length(Result) - Result[Length(Result)-1]);
@@ -106,21 +76,21 @@ begin
   end;
 end;
 
-class function TAES.DecryptCBC(const ACrypt, AKey: TBytes; const AKeySize: Integer; const APaddingMode: TPaddingMode): TBytes;
+class function TAES.DecryptCBC(const Crypt, Key: TBytes; const KeySize: Integer; const PaddingMode: TPaddingMode): TBytes;
 var
   Guid: TGUID;
   IV: TBytes;
 begin
   CreateGuid(Guid);
   IV := Guid.ToByteArray;
-  Result := Decrypt(ACrypt, AKey, AKeySize, IV, cmCBC, APaddingMode);
+  Result := Decrypt(Crypt, Key, KeySize, IV, cmCBC, PaddingMode);
   Result := Copy(Result, Length(IV), Length(Result) - Length(IV));
 end;
 
-class procedure TAES.BytePadding(var Data: TBytes; BlockSize: integer; PaddingMode: TPaddingMode);
+class procedure TAES.BytePadding(var Data: TBytes; BlockSize: Integer; PaddingMode: TPaddingMode);
 // Supports: ANSI X.923, ISO 10126, ISO 7816, PKCS7, zero padding and random padding
 var
-  I, DataBlocks, DataLength, PaddingStart, PaddingCount: integer;
+  I, DataBlocks, DataLength, PaddingStart, PaddingCount: Integer;
 begin
   BlockSize := BlockSize div 8; // convert bits to bytes
   // Zero and Random padding do not use end-markers, so if Length(Data) is a multiple of BlockSize, no padding is needed
