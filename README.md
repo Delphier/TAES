@@ -4,11 +4,11 @@ A lightweight AES encryption/decryption unit for Delphi.
 
 ## Features
 
-- **AES only** this library is focused exclusively on the AES algorithm; it does not implement other ciphers.
-- **Single unit, no external dependencies** easy to drop into any Delphi project.
-- **Multiple chaining modes** CBC, CFB (8-bit and full block), OFB, CTR, and ECB.
-- **Multiple padding modes** PKCS7, ANSI X.923, ISO 10126, ISO 7816, zero padding, and random padding.
-- **128 / 192 / 256-bit keys** supports all standard AES key sizes.
+- **AES only** - this library is focused exclusively on the AES algorithm; it does not implement other ciphers.
+- **Single unit, no external dependencies** - easy to drop into any Delphi project.
+- **Multiple chaining modes** - CBC, CFB (8-bit and full block), OFB, CTR, and ECB.
+- **Multiple padding modes** - PKCS7, ANSI X.923, ISO 10126, ISO 7816, zero padding, and random padding.
+- **128 / 192 / 256-bit keys** - supports all standard AES key sizes.
 
 ## Installation
 

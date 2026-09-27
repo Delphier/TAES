@@ -25,11 +25,10 @@ type
   {$IFEND}
 
   PDWord = ^DWord;
-  DWord = LongWord;
   PWordArray = ^TWordArray;
   TWordArray = array[0..19383] of Word;
   PDWordArray = ^TDWordArray;
-  TDWordArray = array[0 .. 8191]of DWord;
+  TDWordArray = array[0..8191] of DWord;
 
   {$IFNDEF DELPHIXE2_UP}
   NativeInt = {$IFDEF WIN64}Int64{$ELSE}LongInt{$ENDIF};
