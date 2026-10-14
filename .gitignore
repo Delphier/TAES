@@ -1,4 +1,5 @@
 *.exe
+*.res
 
 *.local
 *.identcache
